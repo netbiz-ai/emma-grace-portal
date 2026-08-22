@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Emma-Grace's Game Portal</title>
+<meta name="theme-color" content="#B8A7F9">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Emma-Grace">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="sky" aria-hidden="true"></div>
+
+<!-- Mini the unicorn mascot, defined once and reused -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="mini" viewBox="0 0 100 100">
+      <circle cx="25" cy="36" r="9" fill="#FFC7E3"/>
+      <circle cx="19" cy="49" r="8" fill="#D9C8FF"/>
+      <circle cx="22" cy="61" r="7" fill="#C7E8FF"/>
+      <ellipse cx="31" cy="24" rx="6.5" ry="10" fill="#FFFFFF" stroke="#EBDFF7" stroke-width="2" transform="rotate(-18 31 24)"/>
+      <ellipse cx="69" cy="24" rx="6.5" ry="10" fill="#FFFFFF" stroke="#EBDFF7" stroke-width="2" transform="rotate(18 69 24)"/>
+      <ellipse cx="31" cy="26" rx="3" ry="5.5" fill="#FFC7E3" transform="rotate(-18 31 26)"/>
+      <ellipse cx="69" cy="26" rx="3" ry="5.5" fill="#FFC7E3" transform="rotate(18 69 26)"/>
+      <polygon points="50,3 43,30 57,30" fill="#FFD65C"/>
+      <path d="M48,12 h4 M46.5,20 h7" stroke="#F2A93B" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="50" cy="58" r="33" fill="#FFFFFF" stroke="#F0E6FF" stroke-width="2"/>
+      <circle cx="39" cy="56" r="4" fill="#4A3F35"/>
+      <circle cx="61" cy="56" r="4" fill="#4A3F35"/>
+      <circle cx="40.4" cy="54.6" r="1.3" fill="#FFFFFF"/>
+      <circle cx="62.4" cy="54.6" r="1.3" fill="#FFFFFF"/>
+      <ellipse cx="31" cy="67" rx="5" ry="3.2" fill="#FFB3D1" opacity="0.8"/>
+      <ellipse cx="69" cy="67" rx="5" ry="3.2" fill="#FFB3D1" opacity="0.8"/>
+      <path d="M44,71 Q50,76.5 56,71" stroke="#4A3F35" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<header id="app-header">
+  <svg class="mascot" aria-hidden="true"><use href="#mini"/></svg>
+  <div class="greet">
+    <h1 id="greeting">Hi!</h1>
+    <p id="greeting-sub">Let's play!</p>
+  </div>
+  <button id="star-chip" class="star-chip" type="button">⭐ <span id="star-count">0</span></button>
+</header>
+
+<main id="views">
+  <section id="view-home" class="view"></section>
+  <section id="view-game" class="view"></section>
+  <section id="view-stars" class="view"></section>
+  <section id="view-parent" class="view"></section>
+</main>
+
+<nav id="bottom-bar">
+  <button id="nav-home" class="btn btn-nav" type="button">🏠 Home</button>
+  <button id="nav-parent" class="btn btn-nav btn-lock" type="button">🔒 Grown-Ups</button>
+</nav>
+
+<!-- Time limit overlay -->
+<div class="overlay" id="overlay-lock">
+  <div class="sheet">
+    <svg class="mascot big" aria-hidden="true"><use href="#mini"/></svg>
+    <h2>All done for today!</h2>
+    <p>Mini is getting sleepy.<br>See you tomorrow! 🌙</p>
+    <button class="btn btn-ghost" id="lock-parent" type="button">Grown-up tap here</button>
+  </div>
+</div>
+
+<!-- Break time overlay -->
+<div class="overlay" id="overlay-break">
+  <div class="sheet">
+    <div class="sheet-emoji">🧸</div>
+    <h2>Break Time</h2>
+    <p>Stretch, wiggle, grab a snack!</p>
+    <button class="btn btn-ghost" id="break-parent" type="button">Grown-up tap here</button>
+  </div>
+</div>
+
+<!-- Shelf card overlay -->
+<div class="overlay" id="overlay-shelf">
+  <div class="sheet" id="shelf-sheet"></div>
+</div>
+
+<!-- PIN overlay -->
+<div class="overlay" id="overlay-pin">
+  <div class="sheet" id="pin-sheet">
+    <h2 id="pin-title">Grown-ups only</h2>
+    <div class="pin-dots" id="pin-dots">
+      <span></span><span></span><span></span><span></span>
+    </div>
+    <div class="pin-pad" id="pin-pad"></div>
+    <button class="btn btn-ghost" id="pin-cancel" type="button">Cancel</button>
+  </div>
+</div>
+
+<div id="confetti-layer" aria-hidden="true"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
