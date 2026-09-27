@@ -74,6 +74,7 @@ function defaultState() {
     shelf: defaultShelf(),
     challenge: { date: '', done: false },
     breakActive: false,
+    breakDate: '',
     overrideDate: ''
   };
 }
@@ -87,6 +88,8 @@ function loadState() {
       state = Object.assign(base, parsed);
       state.settings = Object.assign(defaultState().settings, parsed.settings || {});
       if (!Array.isArray(state.shelf) || !state.shelf.length) state.shelf = defaultShelf();
+      // Break Time only lasts for the day it was set.
+      if (state.breakActive && state.breakDate !== todayKey()) state.breakActive = false;
       return;
     }
   } catch (e) { /* corrupted storage -> start fresh */ }
@@ -194,7 +197,6 @@ const WORDS7 = [
 /* ---------------- router ---------------- */
 let currentView = 'home';
 let currentGameId = null;
-let gameCleanup = null;
 const views = {
   home: $('#view-home'),
   game: $('#view-game'),
@@ -202,7 +204,6 @@ const views = {
   parent: $('#view-parent')
 };
 function showView(name) {
-  if (gameCleanup) { try { gameCleanup(); } catch (e) {} gameCleanup = null; }
   if (name !== 'game') currentGameId = null;
   currentView = name;
   for (const k in views) views[k].classList.toggle('active', k === name);
@@ -235,6 +236,10 @@ function isLocked() {
   if (state.overrideDate === todayKey()) return false;
   return totalTodaySec() >= lim * 60;
 }
+// Playtime accrues in memory every 5s but is persisted about every 30s,
+// so the gallery dataURLs are not serialized on every tick. The
+// visibilitychange handler below saves when the app goes to background.
+let tickCount = 0;
 setInterval(() => {
   if (document.hidden) return;
   if (!state.breakActive && currentView !== 'parent') {
@@ -243,7 +248,7 @@ setInterval(() => {
     if (currentView === 'game' && currentGameId) {
       t.games[currentGameId] = (t.games[currentGameId] || 0) + 5;
     }
-    save();
+    if (++tickCount % 6 === 0) save();
   }
   updateOverlays();
 }, 5000);
@@ -273,7 +278,8 @@ function renderPinDots() {
   const dots = $('#pin-dots').children;
   for (let i = 0; i < 4; i++) dots[i].classList.toggle('on', i < pinVal.length);
 }
-// onOk(pin) -> return true to close, false to shake and retry
+// onOk(pin) -> return true to close (unless it opened a follow-up prompt),
+// false to shake and retry
 function openPin(title, onOk) {
   pinVal = '';
   pinCb = onOk;
@@ -291,8 +297,11 @@ function pinInput(k) {
   pinVal += k;
   renderPinDots();
   if (pinVal.length === 4 && pinCb) {
-    const ok = pinCb(pinVal);
-    if (ok) { closePin(); }
+    const cb = pinCb;
+    const ok = cb(pinVal);
+    // The callback may chain into a new PIN prompt (e.g. PIN change
+    // confirmation); only close when it did not.
+    if (ok) { if (pinCb === cb) closePin(); }
     else {
       pinVal = '';
       const sheet = $('#pin-sheet');
@@ -368,7 +377,7 @@ function renderHome() {
     shelfItems.forEach(s => {
       const c = el('button', 'card card-shelf');
       c.type = 'button';
-      c.innerHTML = '<span class="card-emoji">' + s.emoji + '</span>' +
+      c.innerHTML = '<span class="card-emoji">' + escapeHtml(s.emoji) + '</span>' +
         '<span class="card-name">' + escapeHtml(s.name) + '</span>' +
         '<span class="card-desc">Lives outside the portal</span>';
       c.onclick = () => { sndTap(); openShelfCard(s); };
@@ -387,11 +396,11 @@ function escapeHtml(s) {
 function openShelfCard(s) {
   const sheet = $('#shelf-sheet');
   sheet.innerHTML = '';
-  sheet.append(el('div', 'sheet-emoji', s.emoji));
+  sheet.append(el('div', 'sheet-emoji', escapeHtml(s.emoji)));
   sheet.append(el('h2', null, escapeHtml(s.name)));
   sheet.append(el('p', null, 'Ask a grown-up to open <b>' + escapeHtml(s.name) + '</b> for you!'));
   const row = el('div', 'shelf-link-row');
-  if (s.url) {
+  if (s.url && /^https?:\/\//i.test(s.url)) {
     const link = el('button', 'btn btn-green btn-sm', '🌐 Open website');
     link.type = 'button';
     link.onclick = () => { window.open(s.url, '_blank'); };
@@ -1049,6 +1058,7 @@ function renderParent() {
   brk.onclick = () => {
     sndTap();
     state.breakActive = !state.breakActive;
+    state.breakDate = state.breakActive ? todayKey() : '';
     save();
     updateOverlays();
     renderParent();
@@ -1128,7 +1138,7 @@ function renderParent() {
   shelfCard.append(el('h3', null, '🎮 Game Shelf'));
   state.shelf.forEach(s => {
     const row = el('div', 'shelf-row');
-    row.append(el('span', 's-emoji', s.emoji));
+    row.append(el('span', 's-emoji', escapeHtml(s.emoji)));
     row.append(el('span', 's-name', escapeHtml(s.name)));
     const hide = el('button', 'btn btn-ghost btn-sm', s.hidden ? 'Show' : 'Hide');
     hide.type = 'button';

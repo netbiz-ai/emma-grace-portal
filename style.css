@@ -265,7 +265,6 @@ html, body {
   max-width: 520px;
   margin: 0 auto;
 }
-.options.two { grid-template-columns: repeat(2, 1fr); max-width: 380px; }
 .opt {
   font-family: inherit;
   font-size: 34px;
