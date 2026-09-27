@@ -71,6 +71,8 @@ function defaultState() {
     playtime: {},        // 'YYYY-MM-DD' -> { total: sec, games: { id: sec } }
     stars: [],           // { d, reason, bonus }
     gallery: [],         // dataURLs (max 20)
+    pets: [],            // adopted pets (Pet Pals)
+    hearts: 0,           // Pet Pals currency, earned by caring for pets
     shelf: defaultShelf(),
     challenge: { date: '', done: false },
     breakActive: false,
@@ -169,13 +171,15 @@ function confetti(n) {
 
 /* ---------------- game registry ---------------- */
 const GAMES = [
+  { id: 'pets', name: 'Pet Pals', emoji: '🐾', cat: 'Pets', desc: 'Adopt & care', bg: 'linear-gradient(160deg,#F3E3FF,#FDF6FF)' },
   { id: 'draw', name: 'Drawing Pad', emoji: '🎨', cat: 'Creative', desc: 'Paint a picture', bg: 'linear-gradient(160deg,#FFE3F0,#FFF6FB)' },
   { id: 'memory', name: 'Memory Match', emoji: '🧠', cat: 'Puzzle', desc: 'Find the pairs', bg: 'linear-gradient(160deg,#E3F2FF,#F5FBFF)' },
   { id: 'numbers', name: 'Number Quest', emoji: '🔢', cat: 'Educational', desc: 'Count & add', bg: 'linear-gradient(160deg,#E7F9EF,#F6FFF9)' },
   { id: 'letters', name: 'Word Wonders', emoji: '🔤', cat: 'Educational', desc: 'Letters & words', bg: 'linear-gradient(160deg,#FFF3D9,#FFFBF2)' }
 ];
-const TITLES = { draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
+const TITLES = { pets: 'Pet Pals', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
 const CATS = [
+  { name: 'Pets', emoji: '🐾' },
   { name: 'Creative', emoji: '🎨' },
   { name: 'Puzzle', emoji: '🧩' },
   { name: 'Educational', emoji: '📚' }
@@ -430,7 +434,8 @@ function startGame(id) {
   v.append(bar);
   const stage = el('div', 'stage');
   v.append(stage);
-  if (id === 'draw') initDraw(stage);
+  if (id === 'pets') initPets(stage);
+  else if (id === 'draw') initDraw(stage);
   else if (id === 'memory') initMemory(stage);
   else if (id === 'numbers') initNumbers(stage);
   else if (id === 'letters') initLetters(stage);
@@ -949,6 +954,282 @@ function initChallenge(stage) {
     grid.append(b);
   });
   stage.append(grid);
+}
+
+/* ============================================================
+   GAME 5: Pet Pals
+   Adopt eggs, hatch pets, and care for them. Fulfilling a
+   pet's needs earns hearts (for adopting more pets) and ages
+   it through six stages, from Newborn to Full Grown. Needs
+   decay with real time, even while the app is closed, but
+   nothing bad ever happens to a neglected pet.
+   ============================================================ */
+const PET_SPECIES = [
+  { sp: 'Puppy', e: '🐶', r: 0, starter: true }, { sp: 'Kitten', e: '🐱', r: 0, starter: true },
+  { sp: 'Chick', e: '🐥', r: 0 },
+  { sp: 'Bunny', e: '🐰', r: 1 }, { sp: 'Fox', e: '🦊', r: 1 }, { sp: 'Frog', e: '🐸', r: 1 },
+  { sp: 'Turtle', e: '🐢', r: 2 }, { sp: 'Panda', e: '🐼', r: 2 }, { sp: 'Owl', e: '🦉', r: 2 },
+  { sp: 'Penguin', e: '🐧', r: 3 }, { sp: 'Koala', e: '🐨', r: 3 }, { sp: 'Hedgehog', e: '🦔', r: 3 },
+  { sp: 'Unicorn', e: '🦄', r: 4 }, { sp: 'Dragon', e: '🐉', r: 4 }
+];
+const PET_RARITY = [
+  { name: 'Common', c: '#6B7B8D', bg: '#E8EDF2', w: 45 },
+  { name: 'Uncommon', c: '#2E7D4F', bg: '#DFF7EC', w: 30 },
+  { name: 'Rare', c: '#3F7FB8', bg: '#E1F0FF', w: 15 },
+  { name: 'Ultra-Rare', c: '#7A63C8', bg: '#EFE9FF', w: 7 },
+  { name: 'Legendary', c: '#9A7200', bg: '#FFF3C4', w: 3 }
+];
+const PET_STAGES = [
+  { name: 'Newborn', up: 'a Newborn 🍼', xp: 0, size: 64 },
+  { name: 'Junior', up: 'a Junior 🧒', xp: 25, size: 76 },
+  { name: 'Pre-Teen', up: 'a Pre-Teen 🎒', xp: 60, size: 88 },
+  { name: 'Teen', up: 'a Teen 🎧', xp: 110, size: 100 },
+  { name: 'Post-Teen', up: 'a Post-Teen 🛹', xp: 175, size: 110 },
+  { name: 'Full Grown', up: 'all Full Grown 🌟', xp: 260, size: 120 }
+];
+const PET_NAMES = ['Biscuit', 'Coco', 'Peanut', 'Mochi', 'Sunny', 'Pip', 'Noodle', 'Bubbles',
+  'Ziggy', 'Maple', 'Sprinkles', 'Pickles', 'Waffles', 'Jellybean', 'Poppy', 'Doodle',
+  'Twinkle', 'Marshmallow'];
+const PET_NEEDS = [
+  { id: 'hunger', name: 'Feed', emoji: '🍎' },
+  { id: 'fun', name: 'Play', emoji: '🧸' },
+  { id: 'clean', name: 'Wash', emoji: '🛁' },
+  { id: 'energy', name: 'Rest', emoji: '😴' }
+];
+const PET_CARE_MSG = {
+  hunger: ['Yummy! 😋', 'Crunch, crunch! 🍎', 'So tasty! 😋'],
+  fun: ['Wheee! 🎈', 'So much fun! 😄', 'Again! Again! 🧸'],
+  clean: ['Splish, splash! 🛁', 'All clean! ✨', 'Bubbles everywhere! 🫧'],
+  energy: ['Zzz... 😴', 'Nap time! 🌙', 'So cozy... 💤']
+};
+const PET_DECAY = 0.5;   // need points lost per minute, even while away
+const PET_BOOST = 45;    // need points restored per care action
+const PET_XP = 10;       // xp per care action, +5 bonus when the need was urgent
+const PET_EGG_COST = 10; // hearts
+const PET_MAX = 8;
+
+let petSelId = null;
+
+function newPetNeeds() {
+  const t = Date.now();
+  const n = {};
+  PET_NEEDS.forEach(x => { n[x.id] = { v: 90, t: t }; });
+  return n;
+}
+function petNeedNow(n) {
+  const mins = (Date.now() - n.t) / 60000;
+  return Math.max(0, Math.min(100, n.v - mins * PET_DECAY));
+}
+function petStage(p) {
+  let s = PET_STAGES[0], next = null;
+  for (let i = 0; i < PET_STAGES.length; i++) {
+    if (p.xp >= PET_STAGES[i].xp) s = PET_STAGES[i];
+    else { next = PET_STAGES[i]; break; }
+  }
+  return { s: s, next: next };
+}
+function pickPetSpecies(starter) {
+  if (starter) {
+    const st = PET_SPECIES.filter(x => x.starter);
+    return st[Math.floor(Math.random() * st.length)];
+  }
+  const total = PET_RARITY.reduce((a, r) => a + r.w, 0);
+  let roll = Math.random() * total, ri = PET_RARITY.length - 1;
+  for (let i = 0; i < PET_RARITY.length; i++) {
+    roll -= PET_RARITY[i].w;
+    if (roll <= 0) { ri = i; break; }
+  }
+  const pool = PET_SPECIES.filter(x => x.r === ri);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+function pickPetName() {
+  const used = new Set(state.pets.map(p => p.name));
+  const free = PET_NAMES.filter(n => !used.has(n));
+  const list = free.length ? free : PET_NAMES;
+  return list[Math.floor(Math.random() * list.length)];
+}
+function activePet() {
+  let p = state.pets.find(x => x.id === petSelId);
+  if (!p && state.pets.length) { p = state.pets[state.pets.length - 1]; petSelId = p.id; }
+  return p || null;
+}
+
+function initPets(stage) {
+  let hatching = false;
+  let hatched = null;
+  let petMsg = '';
+
+  function hatch() {
+    if (hatching || state.pets.length >= PET_MAX) return;
+    const starter = state.pets.length === 0;
+    if (!starter) {
+      if (state.hearts < PET_EGG_COST) return;
+      state.hearts -= PET_EGG_COST;
+    }
+    hatching = true;
+    const spec = pickPetSpecies(starter);
+    const pet = {
+      id: 'p' + Date.now() + Math.floor(Math.random() * 1000),
+      sp: spec.sp, e: spec.e, r: spec.r,
+      name: pickPetName(),
+      xp: 0, born: Date.now(),
+      needs: newPetNeeds()
+    };
+    state.pets.push(pet);
+    petSelId = pet.id;
+    save();
+    sndTap();
+    render();
+    setTimeout(() => {
+      hatching = false;
+      hatched = pet;
+      sndWin();
+      confetti(pet.r >= 3 ? 36 : 20);
+      render();
+    }, 900);
+  }
+
+  function careFor(pet, needId) {
+    const beforeStage = petStage(pet).s.name;
+    const before = petNeedNow(pet.needs[needId]);
+    pet.needs[needId] = { v: Math.min(100, before + PET_BOOST), t: Date.now() };
+    pet.xp += PET_XP + (before < 30 ? 5 : 0);
+    state.hearts += 2;
+    const st = petStage(pet);
+    if (st.s.name !== beforeStage) {
+      state.hearts += 5;
+      petMsg = pet.name + ' is ' + st.s.up + '!';
+      sndWin();
+      confetti();
+    } else {
+      const msgs = PET_CARE_MSG[needId];
+      petMsg = msgs[Math.floor(Math.random() * msgs.length)];
+      sndGood();
+    }
+    save();
+    render();
+  }
+
+  function render() {
+    stage.innerHTML = '';
+
+    if (hatching) {
+      stage.append(el('div', 'center pet-egg-big', '🥚'));
+      stage.append(el('p', 'result-msg center', 'Something is wiggling...'));
+      return;
+    }
+    if (hatched) {
+      const r = PET_RARITY[hatched.r];
+      const big = el('div', 'center pet-emoji', hatched.e);
+      big.style.fontSize = '96px';
+      stage.append(big);
+      stage.append(el('p', 'result-msg center', 'It\'s ' + hatched.name + ' the ' + hatched.sp + '!'));
+      const badge = el('span', 'pet-badge', r.name);
+      badge.style.background = r.bg;
+      badge.style.color = r.c;
+      const bw = el('div', 'center pet-info');
+      bw.append(badge);
+      stage.append(bw);
+      const hi = el('button', 'btn', 'Say hi! 👋');
+      hi.type = 'button';
+      hi.onclick = () => { sndTap(); hatched = null; petMsg = ''; render(); };
+      const wrap = el('div', 'center pet-actions');
+      wrap.append(hi);
+      stage.append(wrap);
+      return;
+    }
+
+    const pet = activePet();
+    if (!pet) {
+      const card = el('button', 'card pet-egg-card');
+      card.type = 'button';
+      card.innerHTML = '<span class="card-emoji">🥚</span>' +
+        '<span class="card-name">A mystery egg!</span>' +
+        '<span class="card-desc">Tap to meet your first pet - free!</span>';
+      card.onclick = hatch;
+      const wrap = el('div', 'pet-egg-wrap');
+      wrap.append(card);
+      stage.append(wrap);
+      return;
+    }
+
+    // pet switcher + hearts balance
+    const head = el('div', 'pet-head');
+    const strip = el('div', 'pet-strip');
+    state.pets.forEach(p => {
+      const b = el('button', 'pet-tab' + (p.id === pet.id ? ' sel' : ''), p.e);
+      b.type = 'button';
+      b.setAttribute('aria-label', p.name + ' the ' + p.sp);
+      b.onclick = () => { sndTap(); petSelId = p.id; petMsg = ''; render(); };
+      strip.append(b);
+    });
+    head.append(strip, el('span', 'hearts-chip', '💖 ' + state.hearts));
+    stage.append(head);
+
+    // the pet itself
+    const st = petStage(pet);
+    const big = el('div', 'center pet-emoji', pet.e);
+    big.style.fontSize = st.s.size + 'px';
+    stage.append(big);
+    stage.append(el('p', 'pet-name center', pet.name + ' the ' + pet.sp));
+    if (petMsg) stage.append(el('p', 'pet-msg center', petMsg));
+    const info = el('div', 'center pet-info');
+    const badge = el('span', 'pet-badge', PET_RARITY[pet.r].name);
+    badge.style.background = PET_RARITY[pet.r].bg;
+    badge.style.color = PET_RARITY[pet.r].c;
+    info.append(badge, el('span', 'pet-badge pet-badge-stage', st.s.name));
+    stage.append(info);
+
+    // xp towards the next stage
+    const xpRow = el('div', 'bar-row');
+    xpRow.append(el('span', 'bar-day', '✨'));
+    const xpTrack = el('div', 'bar-track');
+    const xpFill = el('div', 'bar-fill');
+    xpFill.style.width = (st.next ? Math.round((pet.xp - st.s.xp) / (st.next.xp - st.s.xp) * 100) : 100) + '%';
+    xpTrack.append(xpFill);
+    xpRow.append(xpTrack, el('span', 'bar-val', st.next ? '' : 'MAX'));
+    stage.append(xpRow);
+
+    // needs
+    PET_NEEDS.forEach(n => {
+      const row = el('div', 'bar-row');
+      row.append(el('span', 'bar-day', n.emoji));
+      const track = el('div', 'bar-track');
+      const fill = el('div', 'bar-fill');
+      const v = Math.round(petNeedNow(pet.needs[n.id]));
+      fill.style.width = v + '%';
+      if (v < 30) fill.classList.add('low');
+      track.append(fill);
+      row.append(track, el('span', 'bar-val', v));
+      stage.append(row);
+    });
+
+    // care actions
+    const care = el('div', 'care-grid');
+    PET_NEEDS.forEach(n => {
+      const b = el('button', 'care-btn', '<span class="care-emoji">' + n.emoji + '</span><br>' + n.name);
+      b.type = 'button';
+      b.onclick = () => careFor(pet, n.id);
+      care.append(b);
+    });
+    stage.append(care);
+
+    // adopt another pet
+    const wrap = el('div', 'center pet-actions');
+    if (state.pets.length < PET_MAX) {
+      const ad = el('button', 'btn btn-green pet-adopt', '🥚 Adopt a new pet · ' + PET_EGG_COST + ' 💖');
+      ad.type = 'button';
+      if (state.hearts < PET_EGG_COST) ad.disabled = true;
+      ad.onclick = hatch;
+      wrap.append(ad);
+      if (state.hearts < PET_EGG_COST) wrap.append(el('p', 'hint', 'Care for your pets to earn 💖!'));
+    } else {
+      wrap.append(el('p', 'hint', 'Your pet family is full! 💜'));
+    }
+    stage.append(wrap);
+  }
+
+  render();
 }
 
 /* ============================================================

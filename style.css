@@ -603,3 +603,83 @@ html, body {
   .options { grid-template-columns: repeat(2, 1fr); }
   .greet h1 { font-size: 23px; }
 }
+
+/* ===== Pet Pals ===== */
+.pet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.pet-strip { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px; flex: 1; }
+.pet-tab {
+  font-family: inherit;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: #FBFAFF;
+  font-size: 24px;
+  box-shadow: 0 3px 0 rgba(91, 75, 138, 0.15);
+  cursor: pointer;
+  padding: 0;
+}
+.pet-tab.sel { border-color: var(--purple); background: #F3EDFF; }
+.hearts-chip {
+  flex: none;
+  background: #fff;
+  border-radius: 999px;
+  padding: 9px 16px;
+  font-size: 17px;
+  font-weight: 600;
+  box-shadow: 0 3px 0 rgba(91, 75, 138, 0.15);
+}
+.pet-emoji { line-height: 1.2; margin: 6px 0 2px; animation: bob 3s ease-in-out infinite; }
+.pet-name { font-size: 24px; font-weight: 600; margin: 2px 0 6px; }
+.pet-msg { font-size: 16px; color: var(--ink-soft); margin: 0 0 8px; }
+.pet-info { margin-bottom: 12px; }
+.pet-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 3px;
+}
+.pet-badge-stage { background: #F3EDFF; color: var(--ink-soft); }
+.bar-fill.low { background: linear-gradient(90deg, #FF9E9E, #FF6B6B); }
+.care-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+}
+.care-btn {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 12px 6px 10px;
+  border: 3px solid #EDE7FF;
+  border-radius: 18px;
+  background: #FBFAFF;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.care-btn:active { transform: scale(0.93); background: #F3EDFF; }
+.care-emoji { font-size: 26px; }
+.pet-actions { margin-top: 16px; }
+.pet-adopt:disabled { opacity: 0.55; cursor: default; }
+.pet-egg-wrap { max-width: 280px; margin: 14px auto; }
+.pet-egg-card { width: 100%; }
+.pet-egg-big {
+  font-size: 96px;
+  text-align: center;
+  margin: 18px 0 6px;
+  animation: shake 0.5s ease-in-out infinite;
+}
+@media (max-width: 480px) {
+  .care-grid { grid-template-columns: repeat(2, 1fr); }
+}
