@@ -73,6 +73,7 @@ function defaultState() {
     gallery: [],         // dataURLs (max 20)
     pets: [],            // adopted pets (Pet Pals)
     hearts: 0,           // Pet Pals currency, earned by caring for pets
+    garden: { coins: 25, plotsUnlocked: 4, plots: [null, null, null, null, null, null], basket: [] },
     shelf: defaultShelf(),
     challenge: { date: '', done: false },
     breakActive: false,
@@ -172,14 +173,16 @@ function confetti(n) {
 /* ---------------- game registry ---------------- */
 const GAMES = [
   { id: 'pets', name: 'Pet Pals', emoji: '🐾', cat: 'Pets', desc: 'Adopt & care', bg: 'linear-gradient(160deg,#F3E3FF,#FDF6FF)' },
+  { id: 'garden', name: 'Magic Garden', emoji: '🌻', cat: 'Garden', desc: 'Plant & harvest', bg: 'linear-gradient(160deg,#E3F9E5,#F7FFF3)' },
   { id: 'draw', name: 'Drawing Pad', emoji: '🎨', cat: 'Creative', desc: 'Paint a picture', bg: 'linear-gradient(160deg,#FFE3F0,#FFF6FB)' },
   { id: 'memory', name: 'Memory Match', emoji: '🧠', cat: 'Puzzle', desc: 'Find the pairs', bg: 'linear-gradient(160deg,#E3F2FF,#F5FBFF)' },
   { id: 'numbers', name: 'Number Quest', emoji: '🔢', cat: 'Educational', desc: 'Count & add', bg: 'linear-gradient(160deg,#E7F9EF,#F6FFF9)' },
   { id: 'letters', name: 'Word Wonders', emoji: '🔤', cat: 'Educational', desc: 'Letters & words', bg: 'linear-gradient(160deg,#FFF3D9,#FFFBF2)' }
 ];
-const TITLES = { pets: 'Pet Pals', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
+const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
 const CATS = [
   { name: 'Pets', emoji: '🐾' },
+  { name: 'Garden', emoji: '🌻' },
   { name: 'Creative', emoji: '🎨' },
   { name: 'Puzzle', emoji: '🧩' },
   { name: 'Educational', emoji: '📚' }
@@ -201,6 +204,7 @@ const WORDS7 = [
 /* ---------------- router ---------------- */
 let currentView = 'home';
 let currentGameId = null;
+let gameTimer = null; // games can set one interval for live re-renders
 const views = {
   home: $('#view-home'),
   game: $('#view-game'),
@@ -208,6 +212,7 @@ const views = {
   parent: $('#view-parent')
 };
 function showView(name) {
+  if (gameTimer) { clearInterval(gameTimer); gameTimer = null; }
   if (name !== 'game') currentGameId = null;
   currentView = name;
   for (const k in views) views[k].classList.toggle('active', k === name);
@@ -420,6 +425,7 @@ function openShelfCard(s) {
 
 /* ---------------- game host ---------------- */
 function startGame(id) {
+  if (gameTimer) { clearInterval(gameTimer); gameTimer = null; }
   const v = views.game;
   v.innerHTML = '';
   const bar = el('div', 'game-bar');
@@ -435,6 +441,7 @@ function startGame(id) {
   const stage = el('div', 'stage');
   v.append(stage);
   if (id === 'pets') initPets(stage);
+  else if (id === 'garden') initGarden(stage);
   else if (id === 'draw') initDraw(stage);
   else if (id === 'memory') initMemory(stage);
   else if (id === 'numbers') initNumbers(stage);
@@ -1230,6 +1237,318 @@ function initPets(stage) {
   }
 
   render();
+}
+
+/* ============================================================
+   GAME 6: Magic Garden
+   Plant seeds, wait for crops to grow (in real time, even
+   while the app is closed), then harvest and sell them for
+   coins. A seed shop restocks every 5 minutes with weighted
+   rarity odds, weather changes every 5 minutes and can
+   multiply growth speed or mutate crops (Wet, Frozen,
+   Shocked, Gold, Rainbow) for big coin paydays. Crops never
+   rot and nothing is ever lost.
+   ============================================================ */
+const SEEDS = [
+  { id: 'carrot', name: 'Carrot', e: '🥕', r: 0, cost: 10, grow: 2, sell: 20 },
+  { id: 'strawberry', name: 'Strawberry', e: '🍓', r: 0, cost: 25, grow: 4, sell: 45, regrow: true },
+  { id: 'tomato', name: 'Tomato', e: '🍅', r: 1, cost: 40, grow: 6, sell: 75, regrow: true },
+  { id: 'corn', name: 'Corn', e: '🌽', r: 1, cost: 60, grow: 8, sell: 115 },
+  { id: 'blueberry', name: 'Blueberry', e: '🫐', r: 1, cost: 80, grow: 10, sell: 150, regrow: true },
+  { id: 'pumpkin', name: 'Pumpkin', e: '🎃', r: 2, cost: 120, grow: 12, sell: 230 },
+  { id: 'watermelon', name: 'Watermelon', e: '🍉', r: 2, cost: 180, grow: 15, sell: 350 },
+  { id: 'grapes', name: 'Grapes', e: '🍇', r: 2, cost: 260, grow: 18, sell: 500 },
+  { id: 'starfruit', name: 'Starfruit', e: '⭐', r: 3, cost: 400, grow: 22, sell: 800 },
+  { id: 'moonbloom', name: 'Moon Bloom', e: '🌙', r: 3, cost: 600, grow: 28, sell: 1250 },
+  { id: 'rainbowrose', name: 'Rainbow Rose', e: '🌈', r: 4, cost: 1000, grow: 40, sell: 2200 }
+];
+const SEED_RARITY = [
+  { name: 'Common', c: '#6B7B8D', bg: '#E8EDF2' },
+  { name: 'Uncommon', c: '#2E7D4F', bg: '#DFF7EC' },
+  { name: 'Rare', c: '#3F7FB8', bg: '#E1F0FF' },
+  { name: 'Legendary', c: '#7A63C8', bg: '#EFE9FF' },
+  { name: 'Mythical', c: '#B84A8A', bg: '#FFE3F2' }
+];
+const SHOP_W = [40, 28, 18, 10, 4];      // rotating-stock rarity weights
+const SHOP_STAPLES = ['carrot', 'strawberry']; // always in stock
+const WEATHERS = [
+  { id: 'sunny', name: 'Sunny', e: '☀️', speed: 1, tip: 'A lovely day for growing.' },
+  { id: 'rain', name: 'Rain', e: '🌧️', speed: 1.5, tip: 'Rain makes crops grow 1.5x fast - harvest now for Wet 💧 crops (2x)!' },
+  { id: 'storm', name: 'Storm', e: '⛈️', speed: 1.5, tip: 'Storms make crops grow 1.5x fast - lightning can make Shocked ⚡ crops (100x)!' },
+  { id: 'frost', name: 'Frost', e: '❄️', speed: 1, tip: 'Harvest during a frost for Frozen 🧊 crops (10x)!' }
+];
+const MUTS = {
+  wet: { name: 'Wet', e: '💧', mult: 2 },
+  frozen: { name: 'Frozen', e: '🧊', mult: 10 },
+  shocked: { name: 'Shocked', e: '⚡', mult: 100 },
+  gold: { name: 'Gold', e: '✨', mult: 20 },
+  rainbow: { name: 'Rainbow', e: '🌈', mult: 50 }
+};
+const G_BUCKET = 5 * 60000;     // weather & shop restock bucket
+const G_WATER_MAX = 3;          // waterings per crop
+const G_WATER_BOOST = 0.1;      // growth gained per watering (of grow time)
+const G_UNLOCK_COSTS = [150, 400]; // plot 5 and 6
+
+function seedById(id) { return SEEDS.find(s => s.id === id); }
+function weatherAt(ts) {
+  const r = mulberry32(hashStr('weather|' + Math.floor(ts / G_BUCKET)))();
+  if (r < 0.6) return WEATHERS[0];
+  if (r < 0.8) return WEATHERS[1];
+  if (r < 0.9) return WEATHERS[2];
+  return WEATHERS[3];
+}
+// Shop: staples + 3 rotating picks, deterministic per 5-minute bucket.
+function seedStock(now) {
+  const rng = mulberry32(hashStr('stock|' + Math.floor(now / G_BUCKET)));
+  const picks = [];
+  let guard = 0;
+  while (picks.length < 3 && guard++ < 80) {
+    let roll = rng() * 100, ri = SHOP_W.length - 1;
+    for (let i = 0; i < SHOP_W.length; i++) { roll -= SHOP_W[i]; if (roll <= 0) { ri = i; break; } }
+    const pool = SEEDS.filter(s => s.r === ri && !SHOP_STAPLES.includes(s.id) && !picks.includes(s));
+    if (pool.length) picks.push(pool[Math.floor(rng() * pool.length)]);
+  }
+  while (picks.length < 3) {
+    const rest = SEEDS.filter(s => !SHOP_STAPLES.includes(s.id) && !picks.includes(s));
+    picks.push(rest[Math.floor(rng() * rest.length)]);
+  }
+  return SHOP_STAPLES.map(seedById).concat(picks);
+}
+function rollMutation(weatherId) {
+  const r = Math.random();
+  if (r < 0.001) return 'rainbow';
+  if (r < 0.011) return 'gold';
+  const w = Math.random();
+  if (weatherId === 'rain' && w < 0.4) return 'wet';
+  if (weatherId === 'storm' && w < 0.3) return 'shocked';
+  if (weatherId === 'frost' && w < 0.3) return 'frozen';
+  return null;
+}
+// Effective minutes grown: weather-weighted elapsed time + watering.
+function growEff(crop, now) {
+  let eff = crop.water * crop.grow * G_WATER_BOOST;
+  let t = crop.planted;
+  while (t < now && eff < crop.grow) {
+    const next = Math.min((Math.floor(t / G_BUCKET) + 1) * G_BUCKET, now);
+    eff += (next - t) / 60000 * weatherAt(t).speed;
+    t = next;
+  }
+  return Math.min(eff, crop.grow);
+}
+
+function initGarden(stage) {
+  const g = state.garden;
+  let planting = -1;
+  let gMsg = '';
+
+  function buy(seed, i) {
+    if (g.coins < seed.cost) return;
+    g.coins -= seed.cost;
+    g.plots[i] = { seed: seed.id, planted: Date.now(), water: 0, grow: seed.grow };
+    planting = -1;
+    gMsg = seed.e + ' ' + seed.name + ' planted! It keeps growing even while you are away.';
+    sndGood();
+    save();
+    render();
+  }
+  function water(i) {
+    const c = g.plots[i];
+    if (!c || c.water >= G_WATER_MAX) return;
+    c.water++;
+    sndGood();
+    save();
+    render();
+  }
+  function unlock() {
+    const cost = G_UNLOCK_COSTS[g.plotsUnlocked - 4];
+    if (cost == null || g.coins < cost) return;
+    g.coins -= cost;
+    g.plotsUnlocked++;
+    gMsg = 'Your garden grew bigger! 🌻';
+    sndWin();
+    confetti(14);
+    save();
+    render();
+  }
+  function harvest(i) {
+    const c = g.plots[i];
+    if (!c) return;
+    const now = Date.now();
+    if (growEff(c, now) < c.grow) return;
+    const seed = seedById(c.seed);
+    const mut = rollMutation(weatherAt(now).id);
+    const m = mut ? MUTS[mut] : null;
+    const val = Math.round(seed.sell * (m ? m.mult : 1));
+    const label = (m ? m.e + ' ' + m.name + ' ' : '') + seed.name;
+    g.basket.push({ e: seed.e, name: label, val: val });
+    if (m && m.mult >= 20) {
+      gMsg = m.e + ' ' + m.name.toUpperCase() + '! You picked a ' + label + '! Amazing!';
+      sndWin();
+      confetti(30);
+    } else {
+      gMsg = 'You picked a ' + label + '!' + (m ? ' Worth ' + m.mult + 'x!' : '');
+      sndGood();
+    }
+    if (seed.regrow) {
+      c.planted = now;
+      c.water = 0;
+      c.grow = Math.max(1, Math.ceil(seed.grow / 2));
+      gMsg += ' It grows back! 🌱';
+    } else {
+      g.plots[i] = null;
+    }
+    save();
+    render();
+  }
+  function sellAll() {
+    if (!g.basket.length) return;
+    const total = g.basket.reduce((a, x) => a + x.val, 0);
+    g.coins += total;
+    gMsg = 'Sold the whole basket for ' + total + ' 🪙!';
+    g.basket = [];
+    sndWin();
+    confetti(14);
+    save();
+    render();
+  }
+
+  function renderShop(now) {
+    stage.append(el('h3', null, '🌱 Seed Shop'));
+    const left = 5 - Math.floor((now % G_BUCKET) / 60000);
+    stage.append(el('p', 'g-tip', 'New seeds arrive in ~' + left + 'm. Rare seeds come and go!'));
+    const grid = el('div', 'g-shop');
+    seedStock(now).forEach(s => {
+      const b = el('button', 'g-seed');
+      b.type = 'button';
+      if (g.coins < s.cost) b.disabled = true;
+      b.innerHTML = '<span class="s-e">' + s.e + '</span><span class="s-n">' + s.name + '</span>';
+      const r = SEED_RARITY[s.r];
+      const badge = el('span', 'pet-badge', r.name);
+      badge.style.background = r.bg;
+      badge.style.color = r.c;
+      b.append(badge);
+      b.append(el('span', 's-i', s.cost + ' 🪙 · ⏱️ ' + s.grow + 'm · sells ~' + s.sell + ' 🪙'));
+      if (s.regrow) b.append(el('span', 's-i', '🌱 grows back after picking!'));
+      b.onclick = () => buy(s, planting);
+      grid.append(b);
+    });
+    stage.append(grid);
+    const cancel = el('button', 'btn btn-ghost', 'Never mind');
+    cancel.type = 'button';
+    cancel.onclick = () => { sndTap(); planting = -1; render(); };
+    const wrap = el('div', 'center pet-actions');
+    wrap.append(cancel);
+    stage.append(wrap);
+  }
+
+  function renderBasket() {
+    if (!g.basket.length) return;
+    stage.append(el('h3', null, '🧺 Harvest Basket'));
+    const groups = {};
+    g.basket.forEach(x => {
+      if (!groups[x.name]) groups[x.name] = { e: x.e, name: x.name, val: x.val, n: 0 };
+      groups[x.name].n++;
+    });
+    const total = g.basket.reduce((a, x) => a + x.val, 0);
+    Object.keys(groups).forEach(k => {
+      const it = groups[k];
+      const row = el('div', 'g-basket-row');
+      row.append(el('span', null, it.e + ' ' + it.name + (it.n > 1 ? ' ×' + it.n : '')));
+      row.append(el('span', null, it.val * it.n + ' 🪙'));
+      stage.append(row);
+    });
+    const sell = el('button', 'btn btn-green', '💰 Sell all for ' + total + ' 🪙');
+    sell.type = 'button';
+    sell.onclick = sellAll;
+    const wrap = el('div', 'center pet-actions');
+    wrap.append(sell);
+    stage.append(wrap);
+  }
+
+  function renderPlots(now) {
+    const w = weatherAt(now);
+    const grid = el('div', 'g-grid');
+    for (let i = 0; i < g.plots.length; i++) {
+      const c = g.plots[i];
+      const plot = el('div', 'gplot');
+      if (i >= g.plotsUnlocked) {
+        plot.classList.add('locked');
+        plot.append(el('div', 'g-crop', '🔒'));
+        const cost = G_UNLOCK_COSTS[g.plotsUnlocked - 4];
+        if (i === g.plotsUnlocked && cost != null) {
+          const b = el('button', 'btn btn-sm btn-green', 'Unlock · ' + cost + ' 🪙');
+          b.type = 'button';
+          if (g.coins < cost) b.disabled = true;
+          b.onclick = unlock;
+          plot.append(b);
+        } else {
+          plot.append(el('div', 'g-time', 'Locked'));
+        }
+      } else if (!c) {
+        plot.append(el('div', 'g-crop', '🟫'));
+        const b = el('button', 'btn btn-sm', 'Tap to plant!');
+        b.type = 'button';
+        b.onclick = () => { sndTap(); planting = i; render(); };
+        plot.append(b);
+      } else {
+        const seed = seedById(c.seed);
+        const eff = growEff(c, now);
+        const prog = Math.min(1, eff / c.grow);
+        const ce = el('div', 'g-crop', seed.e);
+        ce.style.fontSize = (26 + prog * 38) + 'px';
+        plot.append(ce);
+        if (prog >= 1) {
+          plot.classList.add('ready');
+          const b = el('button', 'btn btn-sm btn-pink', 'Harvest!');
+          b.type = 'button';
+          b.onclick = () => harvest(i);
+          plot.append(b);
+        } else {
+          const track = el('div', 'bar-track g-prog');
+          const fill = el('div', 'bar-fill');
+          fill.style.width = Math.round(prog * 100) + '%';
+          track.append(fill);
+          plot.append(track);
+          const remMin = (c.grow - eff) / w.speed;
+          plot.append(el('div', 'g-time', remMin <= 1 ? '⏳ almost ready!' : '⏳ ~' + Math.ceil(remMin) + 'm left'));
+          if (c.water < G_WATER_MAX) {
+            const wb = el('button', 'btn btn-sm g-water', '💧 Water (' + (G_WATER_MAX - c.water) + ')');
+            wb.type = 'button';
+            wb.onclick = () => water(i);
+            plot.append(wb);
+          } else {
+            plot.append(el('div', 'g-time', '💧💧💧'));
+          }
+        }
+      }
+      grid.append(plot);
+    }
+    stage.append(grid);
+  }
+
+  function render() {
+    stage.innerHTML = '';
+    const now = Date.now();
+    const w = weatherAt(now);
+    const head = el('div', 'g-head');
+    head.append(el('span', 'hearts-chip', '🪙 ' + g.coins));
+    head.append(el('span', 'hearts-chip', w.e + ' ' + w.name));
+    head.append(el('span', 'hearts-chip', '🧺 ' + g.basket.length));
+    stage.append(head);
+    stage.append(el('p', 'g-tip', w.tip));
+    if (gMsg) stage.append(el('p', 'pet-msg center', gMsg));
+
+    if (planting >= 0) renderShop(now);
+    else {
+      renderPlots(now);
+      renderBasket();
+    }
+  }
+
+  render();
+  gameTimer = setInterval(() => {
+    if (currentView === 'game' && currentGameId === 'garden') render();
+  }, 5000);
 }
 
 /* ============================================================

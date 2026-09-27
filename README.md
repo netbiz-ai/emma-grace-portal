@@ -7,8 +7,9 @@ It is a plain HTML/CSS/JS web app with no build step, no frameworks, and no trac
 ## What is inside
 
 - **Home screen** with big, colorful, touch-friendly cards organized by category.
-- **5 built-in mini-games** that work fully offline:
+- **6 built-in mini-games** that work fully offline:
   - Pet Pals (hatch eggs, feed/play/wash/rest your pets to earn hearts and adopt more; pets grow from Newborn to Full Grown across 5 rarity tiers)
+  - Magic Garden (plant seeds, water them, and harvest for coins; crops grow in real time even while away, with rotating seed stock, weather, and rare Gold/Rainbow/Shocked mutations worth up to 100x)
   - Drawing Pad (paint, save to a gallery of the last 20 drawings)
   - Memory Match (emoji card pairs)
   - Number Quest (counting and addition)
