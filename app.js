@@ -1571,8 +1571,9 @@ const KD_GRAV = 2600;    // px/s^2
 const KD_JUMP = 800;     // px/s jump impulse
 const KD_STEP = 14;      // px/s gained per key stepped on
 const KD_KEY_TOP = 300;  // canvas y of the key surface
-const KD_FALL = 240;     // px below the surface before it counts as a fall
+const KD_FALL = 300;     // px below the surface before it counts as a fall
 const KD_CHAR_X = 180;   // runner's fixed screen x
+let kdProbe = null;      // debug/testing handle for the live run
 const KD_ROWS = 'QWERTYUIOPASDFGHJKLZXCVBNM';
 const KD_PAL = [
   { top: '#FFE3F0', front: '#FF9EC7', ink: '#7A2E54' },
@@ -1616,16 +1617,20 @@ function kdNewSim(n) {
     stage: n, level: level,
     x: level.keys[0].x + 40, y: 0, vy: 0,
     grounded: true, speed: level.baseSpeed,
-    keyIdx: 0, status: 'run' // run | fall | clear
+    keyIdx: 0, status: 'run', // run | fall | clear
+    coyote: 0
   };
 }
 // One physics step. y = 0 is the key surface, positive is down.
 function kdStep(s, dt, jump) {
   const ev = { jumped: false, landed: 0, fell: false, cleared: false };
   if (s.status !== 'run') return ev;
-  if (jump && s.grounded) {
+  if (s.grounded) s.coyote = 0; else s.coyote += dt * 1000;
+  // Jumps work on the ground or within 100ms of leaving it (coyote time).
+  if (jump && (s.grounded || s.coyote < 100)) {
     s.vy = -KD_JUMP;
     s.grounded = false;
+    s.coyote = 999;
     ev.jumped = true;
   }
   s.vy += KD_GRAV * dt;
@@ -1685,11 +1690,12 @@ function initKeydash(stage) {
 
   let sim = kdNewSim(state.keydash.stage);
   let mode = 'intro'; // intro | play | dead | clear
-  let jumpQueued = false;
+  let jumpBufferT = -1000; // last tap time in ms (input buffering)
   let lastT = 0;
   let deadT = 0;
   let pops = [];
   let decos = [];
+  kdProbe = { get sim() { return sim; }, get mode() { return mode; } };
 
   function buildDecos() {
     const rng = mulberry32(hashStr('kddeco|' + sim.stage));
@@ -1705,6 +1711,11 @@ function initKeydash(stage) {
     }
   }
 
+  function startPlay() {
+    panel.style.display = 'none';
+    mode = 'play';
+  }
+
   function showIntro() {
     mode = 'intro';
     panel.innerHTML = '';
@@ -1717,7 +1728,7 @@ function initKeydash(stage) {
     }
     const b = el('button', 'btn', '▶️ Start');
     b.type = 'button';
-    b.onclick = () => { sndTap(); panel.style.display = 'none'; mode = 'play'; };
+    b.onclick = () => { sndTap(); startPlay(); };
     panel.append(b);
   }
 
@@ -1753,15 +1764,16 @@ function initKeydash(stage) {
 
   canvas.addEventListener('pointerdown', e => {
     e.preventDefault();
-    if (mode === 'play') jumpQueued = true;
+    if (mode === 'intro') startPlay(); // "tap anywhere" starts too
+    if (mode === 'play') jumpBufferT = performance.now();
   });
 
   function tick(t) {
     if (mode === 'play') {
       const dt = Math.min(0.05, lastT ? (t - lastT) / 1000 : 0.016);
-      const ev = kdStep(sim, dt, jumpQueued);
-      jumpQueued = false;
-      if (ev.jumped) beep(480, 0.09, 'sine', 0.07);
+      // Taps are buffered for 150ms so early or mid-air taps still jump.
+      const ev = kdStep(sim, dt, t - jumpBufferT < 150);
+      if (ev.jumped) { jumpBufferT = -1000; beep(480, 0.09, 'sine', 0.07); }
       if (ev.landed) { kdClick(sim.speed); pops.push({ x: sim.x, t: t }); }
       if (ev.fell) { mode = 'dead'; deadT = t; sndNo(); }
       if (ev.cleared) onClear();
