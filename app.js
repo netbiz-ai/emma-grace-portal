@@ -74,6 +74,7 @@ function defaultState() {
     pets: [],            // adopted pets (Pet Pals)
     hearts: 0,           // Pet Pals currency, earned by caring for pets
     garden: { coins: 25, plotsUnlocked: 4, plots: [null, null, null, null, null, null], basket: [] },
+    keydash: { stage: 1, top: 0 }, // highest stage reached, top speed
     shelf: defaultShelf(),
     challenge: { date: '', done: false },
     breakActive: false,
@@ -174,15 +175,17 @@ function confetti(n) {
 const GAMES = [
   { id: 'pets', name: 'Pet Pals', emoji: '🐾', cat: 'Pets', desc: 'Adopt & care', bg: 'linear-gradient(160deg,#F3E3FF,#FDF6FF)' },
   { id: 'garden', name: 'Magic Garden', emoji: '🌻', cat: 'Garden', desc: 'Plant & harvest', bg: 'linear-gradient(160deg,#E3F9E5,#F7FFF3)' },
+  { id: 'keydash', name: 'Keyboard Dash', emoji: '⌨️', cat: 'Arcade', desc: 'Jump the keys!', bg: 'linear-gradient(160deg,#FFE9F4,#FFF9FC)' },
   { id: 'draw', name: 'Drawing Pad', emoji: '🎨', cat: 'Creative', desc: 'Paint a picture', bg: 'linear-gradient(160deg,#FFE3F0,#FFF6FB)' },
   { id: 'memory', name: 'Memory Match', emoji: '🧠', cat: 'Puzzle', desc: 'Find the pairs', bg: 'linear-gradient(160deg,#E3F2FF,#F5FBFF)' },
   { id: 'numbers', name: 'Number Quest', emoji: '🔢', cat: 'Educational', desc: 'Count & add', bg: 'linear-gradient(160deg,#E7F9EF,#F6FFF9)' },
   { id: 'letters', name: 'Word Wonders', emoji: '🔤', cat: 'Educational', desc: 'Letters & words', bg: 'linear-gradient(160deg,#FFF3D9,#FFFBF2)' }
 ];
-const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
+const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', keydash: 'Keyboard Dash', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
 const CATS = [
   { name: 'Pets', emoji: '🐾' },
   { name: 'Garden', emoji: '🌻' },
+  { name: 'Arcade', emoji: '🕹️' },
   { name: 'Creative', emoji: '🎨' },
   { name: 'Puzzle', emoji: '🧩' },
   { name: 'Educational', emoji: '📚' }
@@ -205,6 +208,7 @@ const WORDS7 = [
 let currentView = 'home';
 let currentGameId = null;
 let gameTimer = null; // games can set one interval for live re-renders
+let gameRaf = null;   // ...or one animation-frame loop
 const views = {
   home: $('#view-home'),
   game: $('#view-game'),
@@ -213,6 +217,7 @@ const views = {
 };
 function showView(name) {
   if (gameTimer) { clearInterval(gameTimer); gameTimer = null; }
+  if (gameRaf) { cancelAnimationFrame(gameRaf); gameRaf = null; }
   if (name !== 'game') currentGameId = null;
   currentView = name;
   for (const k in views) views[k].classList.toggle('active', k === name);
@@ -426,6 +431,7 @@ function openShelfCard(s) {
 /* ---------------- game host ---------------- */
 function startGame(id) {
   if (gameTimer) { clearInterval(gameTimer); gameTimer = null; }
+  if (gameRaf) { cancelAnimationFrame(gameRaf); gameRaf = null; }
   const v = views.game;
   v.innerHTML = '';
   const bar = el('div', 'game-bar');
@@ -442,6 +448,7 @@ function startGame(id) {
   v.append(stage);
   if (id === 'pets') initPets(stage);
   else if (id === 'garden') initGarden(stage);
+  else if (id === 'keydash') initKeydash(stage);
   else if (id === 'draw') initDraw(stage);
   else if (id === 'memory') initMemory(stage);
   else if (id === 'numbers') initNumbers(stage);
@@ -1549,6 +1556,293 @@ function initGarden(stage) {
   gameTimer = setInterval(() => {
     if (currentView === 'game' && currentGameId === 'garden') render();
   }, 5000);
+}
+
+/* ============================================================
+   GAME 7: Keyboard Dash
+   Mini the unicorn auto-runs across giant candy keyboard
+   keys. Tap anywhere to jump the gaps; every key you step on
+   gives +1 speed, so you keep accelerating. One fall and you
+   are back at the start of the stage. Reach the ENTER key to
+   escape. Stage layouts are deterministic, so retries are
+   fair, and the highest stage reached is saved.
+   ============================================================ */
+const KD_GRAV = 2600;    // px/s^2
+const KD_JUMP = 800;     // px/s jump impulse
+const KD_STEP = 14;      // px/s gained per key stepped on
+const KD_KEY_TOP = 300;  // canvas y of the key surface
+const KD_FALL = 240;     // px below the surface before it counts as a fall
+const KD_CHAR_X = 180;   // runner's fixed screen x
+const KD_ROWS = 'QWERTYUIOPASDFGHJKLZXCVBNM';
+const KD_PAL = [
+  { top: '#FFE3F0', front: '#FF9EC7', ink: '#7A2E54' },
+  { top: '#EFE7FF', front: '#B8A7F9', ink: '#4A3A86' },
+  { top: '#E1F2FF', front: '#8FCBFF', ink: '#2E5E8C' },
+  { top: '#E2F9EC', front: '#9BE7C4', ink: '#256B4C' },
+  { top: '#FFF4D9', front: '#FFD93D', ink: '#7A5C00' },
+  { top: '#FFE9E1', front: '#FFB59E', ink: '#8C4326' }
+];
+
+// Deterministic layout per stage: same course every retry.
+function kdBuildStage(n) {
+  const rng = mulberry32(hashStr('keydash|' + n));
+  const keys = [{ x: 0, w: 260, letter: '▶', c: 0 }];
+  const total = 20 + n * 6;
+  const gapMin = Math.min(120, 34 + n * 8);
+  const gapVar = Math.min(90, 30 + n * 6);
+  let x = 260, li = 0;
+  for (let i = 0; i < total; i++) {
+    const isSpace = i % 9 === 8;
+    x += i === 0 ? 30 : Math.round(gapMin + rng() * gapVar);
+    const w = isSpace ? 240 : 92 + Math.round(rng() * 36);
+    keys.push({ x: x, w: w, letter: isSpace ? 'SPACE' : KD_ROWS[li++ % 26], c: (i + 1) % KD_PAL.length });
+    x += w;
+  }
+  x += Math.round(gapMin + rng() * gapVar);
+  keys.push({ x: x, w: 300, letter: 'ENTER ⏎', c: 4 });
+  const last = keys[keys.length - 1];
+  return { keys: keys, baseSpeed: 120 + n * 15, finishX: last.x + last.w - 40 };
+}
+function kdKeyAt(level, x) {
+  const ks = level.keys;
+  for (let i = 0; i < ks.length; i++) {
+    if (x >= ks[i].x && x <= ks[i].x + ks[i].w) return i;
+  }
+  return -1;
+}
+function kdNewSim(n) {
+  const level = kdBuildStage(n);
+  return {
+    stage: n, level: level,
+    x: level.keys[0].x + 40, y: 0, vy: 0,
+    grounded: true, speed: level.baseSpeed,
+    keyIdx: 0, status: 'run' // run | fall | clear
+  };
+}
+// One physics step. y = 0 is the key surface, positive is down.
+function kdStep(s, dt, jump) {
+  const ev = { jumped: false, landed: 0, fell: false, cleared: false };
+  if (s.status !== 'run') return ev;
+  if (jump && s.grounded) {
+    s.vy = -KD_JUMP;
+    s.grounded = false;
+    ev.jumped = true;
+  }
+  s.vy += KD_GRAV * dt;
+  s.y += s.vy * dt;
+  s.x += s.speed * dt;
+  const ki = kdKeyAt(s.level, s.x);
+  if (s.grounded) {
+    if (ki < 0) {
+      s.grounded = false; // ran off the edge of a key
+    } else {
+      s.y = 0;
+      s.vy = 0;
+      if (ki !== s.keyIdx) {
+        s.keyIdx = ki;
+        s.speed += KD_STEP;
+        ev.landed = 1;
+      }
+    }
+  } else if (s.vy > 0 && s.y >= 0) {
+    if (ki >= 0) {
+      s.grounded = true;
+      s.y = 0;
+      s.vy = 0;
+      if (ki !== s.keyIdx) {
+        s.keyIdx = ki;
+        s.speed += KD_STEP;
+        ev.landed = 1;
+      }
+    } else if (s.y > KD_FALL) {
+      s.status = 'fall';
+      ev.fell = true;
+    }
+  }
+  if (s.status === 'run' && s.grounded && s.x >= s.level.finishX) {
+    s.status = 'clear';
+    ev.cleared = true;
+  }
+  return ev;
+}
+// Layered mechanical-keyboard click; pitch climbs with speed.
+function kdClick(speed) {
+  const f = 1500 + Math.min(900, (speed - 100) * 1.2);
+  beep(f, 0.03, 'square', 0.05);
+  beep(f * 0.5, 0.045, 'triangle', 0.04, 0.012);
+}
+
+function initKeydash(stage) {
+  const W = 900, H = 420;
+  const canvas = el('canvas');
+  canvas.id = 'kd-canvas';
+  canvas.width = W;
+  canvas.height = H;
+  stage.append(canvas);
+  const panel = el('div', 'kd-panel');
+  stage.append(panel);
+  const ctx = canvas.getContext('2d');
+
+  let sim = kdNewSim(state.keydash.stage);
+  let mode = 'intro'; // intro | play | dead | clear
+  let jumpQueued = false;
+  let lastT = 0;
+  let deadT = 0;
+  let pops = [];
+  let decos = [];
+
+  function buildDecos() {
+    const rng = mulberry32(hashStr('kddeco|' + sim.stage));
+    const DE = ['🍭', '🍬', '🍫', '🧁', '🍩', '🍪'];
+    decos = [];
+    for (let i = 0; i < 40; i++) {
+      decos.push({
+        x: rng() * (sim.level.finishX + 600),
+        y: 30 + rng() * 190,
+        e: DE[Math.floor(rng() * DE.length)],
+        s: 22 + Math.floor(rng() * 20)
+      });
+    }
+  }
+
+  function showIntro() {
+    mode = 'intro';
+    panel.innerHTML = '';
+    panel.style.display = '';
+    panel.append(el('p', 'kd-msg',
+      'Tap anywhere to <b>JUMP</b>! Every key you land on makes you faster ⚡<br>' +
+      'Reach the <b>ENTER ⏎</b> key to escape!'));
+    if (state.keydash.top > 0) {
+      panel.append(el('p', 'kd-hint', 'Best: Stage ' + state.keydash.stage + ' · ⚡ ' + state.keydash.top));
+    }
+    const b = el('button', 'btn', '▶️ Start');
+    b.type = 'button';
+    b.onclick = () => { sndTap(); panel.style.display = 'none'; mode = 'play'; };
+    panel.append(b);
+  }
+
+  function onClear() {
+    mode = 'clear';
+    state.keydash.top = Math.max(state.keydash.top, Math.round(sim.speed));
+    state.keydash.stage = Math.max(state.keydash.stage, sim.stage + 1);
+    save();
+    sndWin();
+    confetti(30);
+    panel.innerHTML = '';
+    panel.style.display = '';
+    panel.append(el('p', 'kd-msg', '🎉 You escaped Stage ' + sim.stage + '! Top speed: ⚡ ' + Math.round(sim.speed)));
+    const b = el('button', 'btn', '➡️ Stage ' + (sim.stage + 1));
+    b.type = 'button';
+    b.onclick = () => {
+      sndTap();
+      sim = kdNewSim(sim.stage + 1);
+      buildDecos();
+      pops = [];
+      panel.style.display = 'none';
+      mode = 'play';
+    };
+    panel.append(b);
+  }
+
+  function resetRun() {
+    sim = kdNewSim(sim.stage);
+    buildDecos();
+    pops = [];
+    mode = 'play';
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (mode === 'play') jumpQueued = true;
+  });
+
+  function tick(t) {
+    if (mode === 'play') {
+      const dt = Math.min(0.05, lastT ? (t - lastT) / 1000 : 0.016);
+      const ev = kdStep(sim, dt, jumpQueued);
+      jumpQueued = false;
+      if (ev.jumped) beep(480, 0.09, 'sine', 0.07);
+      if (ev.landed) { kdClick(sim.speed); pops.push({ x: sim.x, t: t }); }
+      if (ev.fell) { mode = 'dead'; deadT = t; sndNo(); }
+      if (ev.cleared) onClear();
+    } else if (mode === 'dead' && t - deadT > 900) {
+      resetRun();
+    }
+    lastT = t;
+    draw(t);
+    gameRaf = requestAnimationFrame(tick);
+  }
+
+  function draw(t) {
+    const cam = Math.max(0, sim.x - KD_CHAR_X);
+    ctx.fillStyle = '#F7F0FF';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, KD_KEY_TOP + 56, W, H - KD_KEY_TOP - 56);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const d of decos) {
+      const sx = d.x - cam * 0.35;
+      if (sx < -60 || sx > W + 60) continue;
+      ctx.font = d.s + 'px serif';
+      ctx.fillText(d.e, sx, d.y);
+    }
+    const ks = sim.level.keys;
+    for (let i = 0; i < ks.length; i++) {
+      const k = ks[i];
+      const sx = k.x - cam;
+      if (sx + k.w < -60 || sx > W + 60) continue;
+      const pal = KD_PAL[k.c];
+      ctx.fillStyle = pal.front;
+      ctx.fillRect(sx, KD_KEY_TOP + 12, k.w, 30);
+      ctx.fillStyle = pal.top;
+      ctx.fillRect(sx, KD_KEY_TOP, k.w, 14);
+      ctx.fillStyle = pal.ink;
+      ctx.font = '700 20px Fredoka, sans-serif';
+      ctx.fillText(k.letter, sx + k.w / 2, KD_KEY_TOP + 27);
+    }
+    pops = pops.filter(p => t - p.t < 700);
+    ctx.font = '700 20px Fredoka, sans-serif';
+    for (const p of pops) {
+      const a = 1 - (t - p.t) / 700;
+      ctx.fillStyle = 'rgba(69, 174, 120, ' + a + ')';
+      ctx.fillText('+1', p.x - cam, KD_KEY_TOP - 24 - (t - p.t) / 14);
+    }
+    ctx.save();
+    ctx.translate(KD_CHAR_X, KD_KEY_TOP + sim.y);
+    if (!sim.grounded) ctx.rotate(sim.vy < 0 ? -0.15 : 0.25);
+    ctx.scale(-1, 1);
+    ctx.font = '46px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('🦄', 0, 2);
+    ctx.restore();
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#5B4B8A';
+    ctx.font = '700 22px Fredoka, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('⚡ ' + Math.round(sim.speed), 16, 28);
+    ctx.textAlign = 'center';
+    ctx.fillText('Stage ' + sim.stage, W / 2, 28);
+    const x0 = sim.level.keys[0].x;
+    const prog = Math.max(0, Math.min(1, (sim.x - x0) / (sim.level.finishX - x0)));
+    ctx.fillStyle = '#E9DFF9';
+    ctx.fillRect(16, 42, W - 32, 8);
+    ctx.fillStyle = '#B8A7F9';
+    ctx.fillRect(16, 42, (W - 32) * prog, 8);
+    if (mode === 'dead') {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#5B4B8A';
+      ctx.font = '700 34px Fredoka, sans-serif';
+      ctx.fillText('😱 Back to the start!', W / 2, H / 2);
+    }
+  }
+
+  buildDecos();
+  showIntro();
+  draw(0);
+  gameRaf = requestAnimationFrame(tick);
 }
 
 /* ============================================================

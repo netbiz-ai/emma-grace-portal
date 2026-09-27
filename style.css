@@ -748,3 +748,17 @@ html, body {
 @media (max-width: 480px) {
   .g-grid { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ===== Keyboard Dash ===== */
+#kd-canvas {
+  width: 100%;
+  border-radius: 18px;
+  background: #F7F0FF;
+  box-shadow: inset 0 0 0 3px #EDE7FF;
+  touch-action: none;
+  display: block;
+  cursor: pointer;
+}
+.kd-panel { text-align: center; padding: 14px 4px 0; }
+.kd-msg { font-size: 17px; color: var(--ink); margin: 4px 0 12px; line-height: 1.5; }
+.kd-hint { font-size: 13px; color: var(--ink-soft); margin: 0 0 10px; }

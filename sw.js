@@ -1,7 +1,7 @@
 'use strict';
 /* Service worker: offline-first for the whole portal. */
 
-const CACHE = 'emma-games-v4';
+const CACHE = 'emma-games-v5';
 const FONT_CACHE = 'emma-games-fonts-v1';
 const ASSETS = [
   './',
