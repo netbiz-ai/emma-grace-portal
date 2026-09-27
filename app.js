@@ -75,6 +75,9 @@ function defaultState() {
     hearts: 0,           // Pet Pals currency, earned by caring for pets
     garden: { coins: 25, plotsUnlocked: 4, plots: [null, null, null, null, null, null], basket: [] },
     keydash: { stage: 1, top: 0 }, // highest stage reached, top speed
+    racer: { best: 0, stars: 0 },  // best distance (m), lifetime stars collected
+    dressup: { stars: 0, theme: 0, outfit: {} },
+    builder: { cells: [], gallery: [] }, // cells: 70 block ids; gallery of saved builds
     shelf: defaultShelf(),
     challenge: { date: '', done: false },
     breakActive: false,
@@ -175,13 +178,16 @@ function confetti(n) {
 const GAMES = [
   { id: 'pets', name: 'Pet Pals', emoji: '🐾', cat: 'Pets', desc: 'Adopt & care', bg: 'linear-gradient(160deg,#F3E3FF,#FDF6FF)' },
   { id: 'garden', name: 'Magic Garden', emoji: '🌻', cat: 'Garden', desc: 'Plant & harvest', bg: 'linear-gradient(160deg,#E3F9E5,#F7FFF3)' },
+  { id: 'racer', name: 'Rainbow Racer', emoji: '🏎️', cat: 'Arcade', desc: 'Dodge & dash!', bg: 'linear-gradient(160deg,#FFE8E8,#FFF7F5)' },
   { id: 'keydash', name: 'Keyboard Dash', emoji: '⌨️', cat: 'Arcade', desc: 'Jump the keys!', bg: 'linear-gradient(160deg,#FFE9F4,#FFF9FC)' },
+  { id: 'dressup', name: 'Dress Up Studio', emoji: '👗', cat: 'Creative', desc: 'Fashion show', bg: 'linear-gradient(160deg,#FFE0EE,#FFF5FA)' },
+  { id: 'builder', name: 'Block Builder', emoji: '🧱', cat: 'Creative', desc: 'Build anything', bg: 'linear-gradient(160deg,#E8F1FF,#F6FAFF)' },
   { id: 'draw', name: 'Drawing Pad', emoji: '🎨', cat: 'Creative', desc: 'Paint a picture', bg: 'linear-gradient(160deg,#FFE3F0,#FFF6FB)' },
   { id: 'memory', name: 'Memory Match', emoji: '🧠', cat: 'Puzzle', desc: 'Find the pairs', bg: 'linear-gradient(160deg,#E3F2FF,#F5FBFF)' },
   { id: 'numbers', name: 'Number Quest', emoji: '🔢', cat: 'Educational', desc: 'Count & add', bg: 'linear-gradient(160deg,#E7F9EF,#F6FFF9)' },
   { id: 'letters', name: 'Word Wonders', emoji: '🔤', cat: 'Educational', desc: 'Letters & words', bg: 'linear-gradient(160deg,#FFF3D9,#FFFBF2)' }
 ];
-const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', keydash: 'Keyboard Dash', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
+const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', racer: 'Rainbow Racer', keydash: 'Keyboard Dash', dressup: 'Dress Up Studio', builder: 'Block Builder', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
 const CATS = [
   { name: 'Pets', emoji: '🐾' },
   { name: 'Garden', emoji: '🌻' },
@@ -448,7 +454,10 @@ function startGame(id) {
   v.append(stage);
   if (id === 'pets') initPets(stage);
   else if (id === 'garden') initGarden(stage);
+  else if (id === 'racer') initRacer(stage);
   else if (id === 'keydash') initKeydash(stage);
+  else if (id === 'dressup') initDressup(stage);
+  else if (id === 'builder') initBuilder(stage);
   else if (id === 'draw') initDraw(stage);
   else if (id === 'memory') initMemory(stage);
   else if (id === 'numbers') initNumbers(stage);
@@ -1855,6 +1864,626 @@ function initKeydash(stage) {
   showIntro();
   draw(0);
   gameRaf = requestAnimationFrame(tick);
+}
+
+/* ============================================================
+   GAME 8: Rainbow Racer
+   A 3-lane kart racer. Tap the left or right half of the
+   screen to change lanes, dodge cones and traffic, grab
+   stars, and catch lightning bolts for a turbo boost.
+   Speed climbs with distance. Three hearts per run; best
+   distance and lifetime stars are saved. Spawning always
+   leaves at least one lane open, so every crash is fair.
+   ============================================================ */
+const RC_W = 760;
+const RC_H = 900;
+const RC_ROAD_X = 60;          // road left edge
+const RC_ROAD_W = RC_W - 120;  // road width
+const RC_LANE_W = RC_ROAD_W / 3;
+const RC_PLAYER_Y = 700;       // top of the kart
+const RC_KART = 86;            // kart size px
+const RC_BASE_SPEED = 300;     // px/s
+const RC_MAX_SPEED = 780;
+const RC_OBSTACLES = ['🚧', '💧', '🪨', '🐌'];
+const RC_CARS = ['🚗', '🚙', '🚌', '🚕'];
+let rcProbe = null;            // debug/testing handle
+
+function rcLaneX(lane) { return RC_ROAD_X + RC_LANE_W / 2 + lane * RC_LANE_W; }
+function rcNewRun() {
+  return {
+    lane: 1, speed: RC_BASE_SPEED, dist: 0, stars: 0,
+    lives: 3, inv: 0, turbo: 0, wobble: 0, over: false,
+    rows: [], nextRow: 380
+  };
+}
+// A row blocks 1-2 lanes (never all 3) and may put an item on a free lane.
+function rcSpawnRow(r) {
+  const lanes = shuffle([0, 1, 2]);
+  const nBlock = Math.random() < 0.55 ? 1 : 2;
+  const blocks = {};
+  for (let i = 0; i < nBlock; i++) {
+    blocks[lanes[i]] = Math.random() < 0.55
+      ? RC_OBSTACLES[Math.floor(Math.random() * RC_OBSTACLES.length)]
+      : RC_CARS[Math.floor(Math.random() * RC_CARS.length)];
+  }
+  const items = {};
+  if (Math.random() < 0.65) {
+    const free = lanes.slice(nBlock);
+    items[free[Math.floor(Math.random() * free.length)]] = Math.random() < 0.7 ? '⭐' : '⚡';
+  }
+  r.rows.push({ y: -120, blocks: blocks, items: items, hit: false, got: false });
+}
+function rcMove(r, dir) {
+  const next = Math.max(0, Math.min(2, r.lane + dir));
+  const changed = next !== r.lane;
+  r.lane = next;
+  return changed;
+}
+function rcStep(r, dt) {
+  const ev = [];
+  if (r.over) return ev;
+  r.speed = Math.min(RC_MAX_SPEED, RC_BASE_SPEED + r.dist * 0.18) * (r.turbo > 0 ? 1.6 : 1);
+  r.dist += r.speed * dt / 50; // meters
+  r.inv = Math.max(0, r.inv - dt * 1000);
+  r.turbo = Math.max(0, r.turbo - dt * 1000);
+  r.wobble = Math.max(0, r.wobble - dt * 1000);
+  r.nextRow -= r.speed * dt;
+  if (r.nextRow <= 0) {
+    rcSpawnRow(r);
+    r.nextRow = Math.max(320, 620 - r.speed * 0.35);
+  }
+  const pc = RC_PLAYER_Y + RC_KART / 2;
+  for (let i = r.rows.length - 1; i >= 0; i--) {
+    const row = r.rows[i];
+    row.y += r.speed * dt;
+    if (!row.hit && row.blocks[r.lane] !== undefined && Math.abs(row.y - pc) < 80) {
+      if (r.turbo > 0) {
+        row.hit = true;
+        ev.push('smash');
+      } else if (r.inv <= 0) {
+        row.hit = true;
+        r.lives--;
+        r.inv = 1600;
+        r.wobble = 500;
+        ev.push('crash');
+        if (r.lives <= 0) { r.over = true; ev.push('over'); }
+      }
+    }
+    if (!row.got && row.items[r.lane] !== undefined && Math.abs(row.y - pc) < 90) {
+      row.got = true;
+      if (row.items[r.lane] === '⭐') { r.stars++; ev.push('star'); }
+      else { r.turbo = 3000; ev.push('turbo'); }
+    }
+    if (row.y > RC_H + 140) r.rows.splice(i, 1);
+  }
+  return ev;
+}
+
+function initRacer(stage) {
+  const wrap = el('div', 'rc-wrap');
+  const canvas = el('canvas');
+  canvas.id = 'rc-canvas';
+  canvas.width = RC_W;
+  canvas.height = RC_H;
+  wrap.append(canvas);
+  const panel = el('div', 'kd-panel');
+  wrap.append(panel);
+  stage.append(wrap);
+  const ctx = canvas.getContext('2d');
+
+  let run = rcNewRun();
+  let mode = 'intro'; // intro | play | over
+  let lastT = 0;
+  let dashOff = 0;
+  rcProbe = { get run() { return run; }, get mode() { return mode; } };
+
+  function startPlay() {
+    panel.style.display = 'none';
+    mode = 'play';
+  }
+  function showIntro() {
+    mode = 'intro';
+    panel.innerHTML = '';
+    panel.style.display = '';
+    panel.append(el('p', 'kd-msg',
+      'Tap the <b>left</b> or <b>right</b> side to change lanes!<br>' +
+      'Dodge the traffic 🚧 Grab ⭐ and catch ⚡ for turbo!'));
+    if (state.racer.best > 0) {
+      panel.append(el('p', 'kd-hint', 'Best: 🏁 ' + state.racer.best + 'm · ⭐ ' + state.racer.stars + ' collected'));
+    }
+    const b = el('button', 'btn', '🏁 Start race');
+    b.type = 'button';
+    b.onclick = () => { sndTap(); startPlay(); };
+    panel.append(b);
+  }
+  function gameOver() {
+    mode = 'over';
+    const d = Math.floor(run.dist);
+    state.racer.best = Math.max(state.racer.best, d);
+    state.racer.stars += run.stars;
+    save();
+    sndWin();
+    confetti(24);
+    panel.innerHTML = '';
+    panel.style.display = '';
+    panel.append(el('p', 'kd-msg',
+      '🏁 Race over! You drove <b>' + d + 'm</b> and grabbed <b>' + run.stars + ' ⭐</b>!' +
+      (d >= state.racer.best && d > 0 ? '<br>New best distance! 🏆' : '')));
+    const b = el('button', 'btn', '🔁 Race again');
+    b.type = 'button';
+    b.onclick = () => { sndTap(); run = rcNewRun(); startPlay(); };
+    panel.append(b);
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (mode === 'intro') { startPlay(); return; }
+    if (mode !== 'play') return;
+    const rect = canvas.getBoundingClientRect();
+    const dir = (e.clientX - rect.left) / rect.width < 0.5 ? -1 : 1;
+    if (rcMove(run, dir)) beep(700, 0.05, 'triangle', 0.06);
+  });
+
+  function tick(t) {
+    if (mode === 'play') {
+      const dt = Math.min(0.05, lastT ? (t - lastT) / 1000 : 0.016);
+      dashOff = (dashOff + run.speed * dt) % 90;
+      rcStep(run, dt).forEach(ev => {
+        if (ev === 'star') beep(1250, 0.09, 'triangle', 0.09);
+        else if (ev === 'turbo') { beep(700, 0.1, 'square', 0.07); beep(1050, 0.14, 'square', 0.07, 0.08); }
+        else if (ev === 'crash') sndNo();
+        else if (ev === 'smash') { beep(180, 0.12, 'sawtooth', 0.08); confetti(6); }
+        else if (ev === 'over') gameOver();
+      });
+    }
+    lastT = t;
+    draw(t);
+    gameRaf = requestAnimationFrame(tick);
+  }
+
+  function drawEmoji(e, x, y, size, rot) {
+    ctx.save();
+    ctx.translate(x, y);
+    if (rot) ctx.rotate(rot);
+    ctx.font = size + 'px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(e, 0, 0);
+    ctx.restore();
+  }
+  function draw(t) {
+    // candy grass
+    ctx.fillStyle = '#D9F2E2';
+    ctx.fillRect(0, 0, RC_W, RC_H);
+    // road
+    ctx.fillStyle = '#8B7BB8';
+    ctx.fillRect(RC_ROAD_X, 0, RC_ROAD_W, RC_H);
+    ctx.fillStyle = '#A795CF';
+    ctx.fillRect(RC_ROAD_X + 8, 0, RC_ROAD_W - 16, RC_H);
+    // lane dashes
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    for (let l = 1; l < 3; l++) {
+      const x = RC_ROAD_X + l * RC_LANE_W;
+      for (let y = -90 + dashOff; y < RC_H + 90; y += 90) {
+        ctx.fillRect(x - 5, y, 10, 44);
+      }
+    }
+    // roadside candy stripes
+    ctx.fillStyle = '#FF9EC7';
+    for (let y = -120 + (dashOff * 1.2) % 120; y < RC_H + 120; y += 120) {
+      ctx.fillRect(24, y, 18, 60);
+      ctx.fillRect(RC_W - 42, y, 18, 60);
+    }
+    // rows: obstacles, cars, items
+    run.rows.forEach(row => {
+      for (const lane in row.blocks) {
+        const e = row.blocks[lane];
+        const isCar = RC_CARS.includes(e);
+        drawEmoji(e, rcLaneX(Number(lane)), row.y, 64, isCar ? Math.PI / 2 : 0);
+      }
+      for (const lane in row.items) {
+        const pulse = 1 + Math.sin(t / 180) * 0.12;
+        drawEmoji(row.items[lane], rcLaneX(Number(lane)), row.y, 52 * pulse, 0);
+      }
+    });
+    // turbo trail
+    if (run.turbo > 0) {
+      ctx.fillStyle = 'rgba(255, 217, 61, 0.45)';
+      ctx.fillRect(rcLaneX(run.lane) - 30, RC_PLAYER_Y + RC_KART, 60, 90);
+    }
+    // the kart (invulnerability blink + crash wobble)
+    const blink = run.inv > 0 && Math.floor(t / 120) % 2 === 0;
+    ctx.globalAlpha = blink ? 0.35 : 1;
+    drawEmoji('🏎️', rcLaneX(run.lane), RC_PLAYER_Y + RC_KART / 2, RC_KART,
+      -Math.PI / 2 + (run.wobble > 0 ? Math.sin(t / 40) * 0.3 : 0));
+    ctx.globalAlpha = 1;
+    // HUD
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.fillRect(12, 12, RC_W - 24, 54);
+    ctx.fillStyle = '#5B4B8A';
+    ctx.font = '700 30px Fredoka, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText('⭐ ' + run.stars, 30, 40);
+    ctx.textAlign = 'center';
+    ctx.fillText('🏁 ' + Math.floor(run.dist) + 'm', RC_W / 2, 40);
+    ctx.textAlign = 'right';
+    ctx.fillText('❤️'.repeat(Math.max(0, run.lives)), RC_W - 30, 40);
+    if (run.turbo > 0) {
+      ctx.textAlign = 'center';
+      ctx.fillText('⚡ TURBO! ⚡', RC_W / 2, 92);
+    }
+  }
+
+  showIntro();
+  draw(0);
+  gameRaf = requestAnimationFrame(tick);
+}
+
+/* ============================================================
+   GAME 9: Dress Up Studio
+   Pick an outfit for the day's theme, then send it down the
+   runway for 2-5 stars. Five slots (hat, outfit, shoes,
+   buddy, extra) plus a "Me" skin-tone picker. Every item
+   belongs to themes; matching the theme earns more stars.
+   No timers, no judges harsher than 2 stars - pure play.
+   ============================================================ */
+const DRESS_THEMES = [
+  { id: 'rainbow', name: 'Rainbow Party', e: '🌈' },
+  { id: 'beach', name: 'Beach Day', e: '🏖️' },
+  { id: 'ball', name: 'Princess Ball', e: '👑' },
+  { id: 'pop', name: 'Pop Star', e: '🎤' },
+  { id: 'winter', name: 'Winter Fun', e: '⛄' },
+  { id: 'pet', name: 'Pet Playdate', e: '🐶' }
+];
+const DRESS_ME = ['🧒', '🧒🏻', '🧒🏼', '🧒🏽', '🧒🏾', '🧒🏿'];
+const DRESS_SLOTS = [
+  { id: 'hat', name: 'Hat', items: [
+    { e: '🎀', name: 'Big Bow', tags: ['rainbow', 'ball'] },
+    { e: '👑', name: 'Tiara', tags: ['ball'] },
+    { e: '👒', name: 'Sun Hat', tags: ['beach'] },
+    { e: '🧢', name: 'Cool Cap', tags: ['pop', 'pet', 'winter'] },
+    { e: '🎩', name: 'Top Hat', tags: ['pop'] },
+    { e: '🌸', name: 'Flower Clip', tags: ['rainbow', 'pet'] }
+  ] },
+  { id: 'outfit', name: 'Outfit', items: [
+    { e: '👗', name: 'Party Dress', tags: ['ball', 'rainbow'] },
+    { e: '🎽', name: 'Sporty Tee', tags: ['rainbow', 'pop'] },
+    { e: '🩱', name: 'Swimsuit', tags: ['beach'] },
+    { e: '🧥', name: 'Warm Coat', tags: ['winter'] },
+    { e: '👚', name: 'Cozy Sweater', tags: ['winter', 'pet'] },
+    { e: '🥻', name: 'Sari', tags: ['ball'] },
+    { e: '👘', name: 'Kimono', tags: ['pet'] }
+  ] },
+  { id: 'shoes', name: 'Shoes', items: [
+    { e: '👟', name: 'Sneakers', tags: ['pet', 'pop', 'rainbow'] },
+    { e: '👠', name: 'Sparkly Heels', tags: ['ball', 'pop'] },
+    { e: '🩴', name: 'Flip Flops', tags: ['beach'] },
+    { e: '👢', name: 'Snow Boots', tags: ['winter'] },
+    { e: '🩰', name: 'Ballet Shoes', tags: ['ball'] },
+    { e: '⛸️', name: 'Ice Skates', tags: ['winter'] }
+  ] },
+  { id: 'buddy', name: 'Buddy', items: [
+    { e: '🦄', name: 'Mini', tags: ['rainbow', 'ball'] },
+    { e: '🐶', name: 'Puppy', tags: ['pet'] },
+    { e: '🐱', name: 'Kitten', tags: ['pet'] },
+    { e: '🐰', name: 'Bunny', tags: ['pet', 'winter'] },
+    { e: '🐥', name: 'Chick', tags: ['pet', 'beach'] },
+    { e: '⛄', name: 'Snowpal', tags: ['winter'] },
+    { e: '🦜', name: 'Parrot', tags: ['beach', 'pop'] }
+  ] },
+  { id: 'extra', name: 'Extra', items: [
+    { e: '🎈', name: 'Balloon', tags: ['rainbow', 'ball'] },
+    { e: '🕶️', name: 'Sunglasses', tags: ['beach', 'pop'] },
+    { e: '🎤', name: 'Microphone', tags: ['pop'] },
+    { e: '🧣', name: 'Scarf', tags: ['winter'] },
+    { e: '🏄', name: 'Surfboard', tags: ['beach'] },
+    { e: '🪄', name: 'Magic Wand', tags: ['ball', 'rainbow'] },
+    { e: '🎒', name: 'Backpack', tags: ['pet'] }
+  ] }
+];
+// Score an outfit against a theme: 2-5 stars, always kind.
+function dressStars(theme, outfit) {
+  let m = 0;
+  DRESS_SLOTS.forEach(s => {
+    const it = s.items[outfit[s.id] || 0];
+    if (it.tags.includes(theme.id)) m++;
+  });
+  return { matches: m, stars: m <= 1 ? 2 : m === 2 ? 3 : m === 3 ? 4 : 5 };
+}
+
+function initDressup(stage) {
+  const d = state.dressup;
+  const outfit = d.outfit;
+  DRESS_SLOTS.forEach(s => { if (outfit[s.id] == null) outfit[s.id] = 0; });
+  if (outfit.me == null) outfit.me = 0;
+  let showing = false;
+
+  function theme() { return DRESS_THEMES[d.theme % DRESS_THEMES.length]; }
+
+  function render() {
+    stage.innerHTML = '';
+    if (showing) return; // runway overlay handles the screen
+
+    // theme banner
+    const banner = el('div', 'dress-theme');
+    banner.append(el('span', null, theme().e + ' Theme: <b>' + theme().name + '</b>'));
+    const reroll = el('button', 'btn btn-ghost btn-sm', '🔄 New theme');
+    reroll.type = 'button';
+    reroll.onclick = () => {
+      sndTap();
+      d.theme = Math.floor(Math.random() * DRESS_THEMES.length);
+      save();
+      render();
+    };
+    banner.append(reroll);
+    stage.append(banner);
+
+    // doll stage
+    const doll = el('div', 'dress-doll');
+    doll.append(el('div', 'dress-part dress-hat', DRESS_SLOTS[0].items[outfit.hat].e));
+    doll.append(el('div', 'dress-part dress-me', DRESS_ME[outfit.me]));
+    doll.append(el('div', 'dress-part dress-outfit', DRESS_SLOTS[1].items[outfit.outfit].e));
+    doll.append(el('div', 'dress-part dress-shoes', DRESS_SLOTS[2].items[outfit.shoes].e));
+    doll.append(el('div', 'dress-part dress-buddy', DRESS_SLOTS[3].items[outfit.buddy].e));
+    doll.append(el('div', 'dress-part dress-extra', DRESS_SLOTS[4].items[outfit.extra].e));
+    stage.append(doll);
+
+    // slot tiles: tap to cycle
+    const tiles = el('div', 'dress-tiles');
+    DRESS_SLOTS.forEach(s => {
+      const it = s.items[outfit[s.id]];
+      const tile = el('button', 'dress-tile', '<span class="dt-e">' + it.e + '</span><span class="dt-n">' + s.name + '</span>');
+      tile.type = 'button';
+      tile.setAttribute('aria-label', s.name + ': ' + it.name + '. Tap to change.');
+      tile.onclick = () => {
+        sndTap();
+        outfit[s.id] = (outfit[s.id] + 1) % s.items.length;
+        save();
+        render();
+      };
+      tiles.append(tile);
+    });
+    const meTile = el('button', 'dress-tile', '<span class="dt-e">' + DRESS_ME[outfit.me] + '</span><span class="dt-n">Me</span>');
+    meTile.type = 'button';
+    meTile.setAttribute('aria-label', 'Me. Tap to change.');
+    meTile.onclick = () => {
+      sndTap();
+      outfit.me = (outfit.me + 1) % DRESS_ME.length;
+      save();
+      render();
+    };
+    tiles.append(meTile);
+    stage.append(tiles);
+
+    const go = el('button', 'btn btn-pink dress-go', '🌟 Runway Show!');
+    go.type = 'button';
+    go.onclick = runway;
+    stage.append(go);
+    stage.append(el('p', 'kd-hint', '⭐ ' + d.stars + ' fashion stars so far!'));
+  }
+
+  function runway() {
+    showing = true;
+    const r = dressStars(theme(), outfit);
+    stage.innerHTML = '';
+    const th = theme();
+    stage.append(el('div', 'dress-theme', '<span>' + th.e + ' ' + th.name + '</span>'));
+    const doll = el('div', 'dress-doll');
+    doll.append(el('div', 'dress-part dress-hat', DRESS_SLOTS[0].items[outfit.hat].e));
+    doll.append(el('div', 'dress-part dress-me', DRESS_ME[outfit.me]));
+    doll.append(el('div', 'dress-part dress-outfit', DRESS_SLOTS[1].items[outfit.outfit].e));
+    doll.append(el('div', 'dress-part dress-shoes', DRESS_SLOTS[2].items[outfit.shoes].e));
+    doll.append(el('div', 'dress-part dress-buddy', DRESS_SLOTS[3].items[outfit.buddy].e));
+    doll.append(el('div', 'dress-part dress-extra', DRESS_SLOTS[4].items[outfit.extra].e));
+    stage.append(doll);
+    const starRow = el('div', 'dress-stars');
+    stage.append(starRow);
+    const msg = el('p', 'kd-msg center', '');
+    msg.style.textAlign = 'center';
+    stage.append(msg);
+
+    // stars pop in one by one
+    for (let i = 0; i < r.stars; i++) {
+      setTimeout(() => {
+        starRow.append(el('span', null, '⭐'));
+        beep(660 + i * 110, 0.14, 'triangle', 0.1);
+      }, 350 + i * 320);
+    }
+    setTimeout(() => {
+      d.stars += r.stars;
+      d.theme = Math.floor(Math.random() * DRESS_THEMES.length);
+      save();
+      msg.innerHTML = (r.stars === 5 ? 'PERFECT! 🏆 +' : 'Fabulous! +') + r.stars + ' fashion stars!';
+      if (r.stars >= 4) { sndWin(); confetti(r.stars === 5 ? 36 : 18); } else sndGood();
+      const again = el('button', 'btn', '👗 Dress up again');
+      again.type = 'button';
+      again.onclick = () => { sndTap(); showing = false; render(); };
+      const wrap = el('div', 'center pet-actions');
+      wrap.append(again);
+      stage.append(wrap);
+    }, 350 + r.stars * 320 + 500);
+  }
+
+  render();
+}
+
+/* ============================================================
+   GAME 10: Block Builder
+   A calm creative sandbox: pick a block, tap or drag to
+   paint with it on a 10x7 grid, erase with the sponge.
+   Builds can be saved to a gallery (max 12) and loaded back
+   for more editing. Nothing to win, nothing to lose.
+   ============================================================ */
+const BB_COLS = 10;
+const BB_ROWS = 7;
+const BLOCKS = [
+  { id: 'grass', name: 'Grass', c: '#8FD694', top: '#A9E8AE' },
+  { id: 'dirt', name: 'Dirt', c: '#B08968', top: '#C4A07E' },
+  { id: 'stone', name: 'Stone', c: '#B8B8C8', top: '#CFCFDD' },
+  { id: 'wood', name: 'Wood', c: '#D9A05B', top: '#E8B878' },
+  { id: 'brick', name: 'Brick', c: '#E07A7A', top: '#EC9494' },
+  { id: 'sand', name: 'Sand', c: '#F2DFA7', top: '#F8EBC3' },
+  { id: 'water', name: 'Water', c: '#7EC8F2', top: '#A5DBF8' },
+  { id: 'snow', name: 'Snow', c: '#F4F8FF', top: '#FFFFFF' },
+  { id: 'gold', name: 'Gold', c: '#FFD93D', top: '#FFE47A' },
+  { id: 'gem', name: 'Gem', c: '#9BE7E4', top: '#C0F2F0' },
+  { id: 'leaf', name: 'Leaves', c: '#6BCB77', top: '#8CDA95' },
+  { id: 'rose', name: 'Rose', c: '#FF9EC7', top: '#FFBDD9' }
+];
+function bbBlock(id) { return BLOCKS.find(b => b.id === id); }
+
+function initBuilder(stage) {
+  const bb = state.builder;
+  if (!Array.isArray(bb.cells) || bb.cells.length !== BB_COLS * BB_ROWS) {
+    bb.cells = new Array(BB_COLS * BB_ROWS).fill(null);
+  }
+  let sel = 'grass'; // block id or 'erase'
+  let painting = false;
+  let clearArmed = false;
+
+  const pal = el('div', 'bb-pal');
+  BLOCKS.forEach(b => {
+    const p = el('button', 'bb-block');
+    p.type = 'button';
+    p.style.background = b.c;
+    p.style.boxShadow = 'inset 0 6px 0 ' + b.top;
+    p.setAttribute('aria-label', b.name);
+    p.dataset.id = b.id;
+    p.onclick = () => { sndTap(); sel = b.id; markSel(); };
+    pal.append(p);
+  });
+  const er = el('button', 'bb-block bb-erase', '🧽');
+  er.type = 'button';
+  er.setAttribute('aria-label', 'Eraser');
+  er.dataset.id = 'erase';
+  er.onclick = () => { sndTap(); sel = 'erase'; markSel(); };
+  pal.append(er);
+  stage.append(pal);
+
+  function markSel() {
+    pal.querySelectorAll('.bb-block').forEach(p => p.classList.toggle('sel', p.dataset.id === sel));
+  }
+  markSel();
+
+  const grid = el('div', 'bb-grid');
+  const cells = [];
+  for (let i = 0; i < BB_COLS * BB_ROWS; i++) {
+    const c = el('div', 'bb-cell');
+    c.dataset.i = i;
+    grid.append(c);
+    cells.push(c);
+  }
+  stage.append(grid);
+
+  function paintCell(c) {
+    const i = Number(c.dataset.i);
+    const val = sel === 'erase' ? null : sel;
+    if (bb.cells[i] === val) return;
+    bb.cells[i] = val;
+    drawCell(i);
+    if (val) beep(500 + Math.random() * 200, 0.03, 'triangle', 0.04);
+  }
+  function drawCell(i) {
+    const id = bb.cells[i];
+    const b = id ? bbBlock(id) : null;
+    cells[i].style.background = b ? b.c : '';
+    cells[i].style.boxShadow = b ? 'inset 0 6px 0 ' + b.top : '';
+  }
+  function drawGrid() { for (let i = 0; i < cells.length; i++) drawCell(i); }
+  drawGrid();
+
+  grid.addEventListener('pointerdown', e => {
+    const c = e.target.closest('.bb-cell');
+    if (!c) return;
+    e.preventDefault();
+    painting = true;
+    paintCell(c);
+  });
+  grid.addEventListener('pointermove', e => {
+    if (!painting) return;
+    const elAt = document.elementFromPoint(e.clientX, e.clientY);
+    const c = elAt && elAt.closest ? elAt.closest('.bb-cell') : null;
+    if (c) paintCell(c);
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(t =>
+    grid.addEventListener(t, () => { if (painting) { painting = false; save(); } }));
+
+  // toolbar: clear + save to gallery
+  const tools = el('div', 'bb-tools');
+  const clearBtn = el('button', 'btn btn-ghost btn-sm', '🗑️ Clear');
+  clearBtn.type = 'button';
+  clearBtn.onclick = () => {
+    sndTap();
+    if (!clearArmed) {
+      clearArmed = true;
+      clearBtn.textContent = 'Tap again to clear it all';
+      setTimeout(() => { clearArmed = false; clearBtn.textContent = '🗑️ Clear'; }, 2500);
+      return;
+    }
+    bb.cells.fill(null);
+    drawGrid();
+    save();
+    clearArmed = false;
+    clearBtn.textContent = '🗑️ Clear';
+  };
+  const saveBtn = el('button', 'btn btn-pink btn-sm', '💾 Save build');
+  saveBtn.type = 'button';
+  tools.append(clearBtn, saveBtn);
+  stage.append(tools);
+
+  const galTitle = el('h3', null, '🏗️ My Builds');
+  galTitle.style.textAlign = 'left';
+  galTitle.style.marginTop = '16px';
+  const strip = el('div', 'gallery-strip');
+
+  function renderGallery() {
+    strip.innerHTML = '';
+    if (!bb.gallery.length) {
+      strip.append(el('span', 'hint', 'No saved builds yet. Tap 💾 Save build to keep one!'));
+      return;
+    }
+    bb.gallery.forEach((entry, i) => {
+      const item = el('div', 'gallery-item');
+      const thumb = el('div', 'bb-thumb');
+      entry.cells.forEach(id => {
+        const b = id ? bbBlock(id) : null;
+        const tc = el('div', 'bb-thumb-cell');
+        if (b) tc.style.background = b.c;
+        thumb.append(tc);
+      });
+      thumb.onclick = () => {
+        sndTap();
+        bb.cells = entry.cells.slice();
+        state.builder.cells = bb.cells;
+        drawGrid();
+        save();
+      };
+      thumb.setAttribute('role', 'button');
+      thumb.setAttribute('aria-label', 'Load build ' + (i + 1));
+      const del = el('button', 'gallery-del', '✕');
+      del.type = 'button';
+      del.onclick = () => {
+        sndTap();
+        bb.gallery.splice(i, 1);
+        save();
+        renderGallery();
+      };
+      item.append(thumb, del);
+      strip.append(item);
+    });
+  }
+  saveBtn.onclick = () => {
+    if (bb.cells.every(x => !x)) { sndNo(); return; }
+    bb.gallery.unshift({ cells: bb.cells.slice() });
+    if (bb.gallery.length > 12) bb.gallery.length = 12;
+    save();
+    renderGallery();
+    sndGood();
+    confetti(10);
+  };
+  stage.append(galTitle, strip);
+  renderGallery();
 }
 
 /* ============================================================

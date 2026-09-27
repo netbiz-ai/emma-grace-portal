@@ -7,10 +7,13 @@ It is a plain HTML/CSS/JS web app with no build step, no frameworks, and no trac
 ## What is inside
 
 - **Home screen** with big, colorful, touch-friendly cards organized by category.
-- **7 built-in mini-games** that work fully offline:
+- **10 built-in mini-games** that work fully offline:
   - Pet Pals (hatch eggs, feed/play/wash/rest your pets to earn hearts and adopt more; pets grow from Newborn to Full Grown across 5 rarity tiers)
   - Magic Garden (plant seeds, water them, and harvest for coins; crops grow in real time even while away, with rotating seed stock, weather, and rare Gold/Rainbow/Shocked mutations worth up to 100x)
+  - Rainbow Racer (3-lane kart racer: tap left/right to dodge traffic, grab stars, catch turbo bolts; 3 hearts per run, best distance saved)
   - Keyboard Dash (tap to jump across giant candy keyboard keys; every key landed is +1 speed, one fall sends you back to the start; reach ENTER to escape each stage)
+  - Dress Up Studio (style an outfit for the day's theme - hat, outfit, shoes, buddy, extra, plus a "Me" picker - then earn 2-5 stars on the runway)
+  - Block Builder (paint with 12 block types on a 10x7 grid; save builds to a gallery and reload them)
   - Drawing Pad (paint, save to a gallery of the last 20 drawings)
   - Memory Match (emoji card pairs)
   - Number Quest (counting and addition)
@@ -64,6 +67,35 @@ It is a plain HTML/CSS/JS web app with no build step, no frameworks, and no trac
 This portal can only enforce limits on itself.
 It cannot control Minecraft, Toca Life, or any other installed app.
 Use **Settings → Screen Time → App Limits** and **Downtime** (with Family Sharing and a Child Account) for hard limits on everything outside the portal.
+
+## Kid safety & privacy
+
+Built to be safe for under-13s, following COPPA, Apple App Store kids-category,
+and Google Play Families guidelines:
+
+- **No personal data collected.** Nothing is asked of the child; the name and
+  birthdate in the parent panel stay on the device.
+- **No accounts, no identifiers.** No sign-in, cookies, device IDs, or
+  fingerprinting. All state lives only in the device's localStorage.
+- **No ads, analytics, or tracking of any kind.**
+- **No third-party content or calls from the games.** Everything is drawn with
+  emoji, CSS, and WebAudio - no images or media are fetched. (The only network
+  request in the whole app is Google Fonts on page load.)
+- **No chat or social features** and no way to contact or be contacted.
+- **Nothing leaves the device.** Drawings, builds, pets, and progress are never
+  uploaded or shared.
+- **No purchases or real money.** In-game hearts/coins/stars are earned only
+  by playing; there is nothing to buy and no loot boxes.
+- **No external links for kids.** The only outward links (Game Shelf websites)
+  are set up by a grown-up in the PIN-protected parent panel.
+- **No dark patterns.** No streak pressure, no ads disguised as buttons, no
+  "come back" manipulation; pets and gardens never punish absence.
+- **Age-appropriate content.** No violence, gambling, or scary material;
+  failure states are gentle (a race ends with a trophy screen, outfits always
+  earn at least 2 stars).
+- **Parental controls built in.** PIN-gated panel with daily time limit,
+  Break Time, and playtime reports; pair with iOS Screen Time for hard limits
+  (see below).
 
 ## Honest limitations
 
