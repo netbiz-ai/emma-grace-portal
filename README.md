@@ -25,6 +25,7 @@ It is a plain HTML/CSS/JS web app with no build step, no frameworks, and no trac
 - **Daily Challenge**: one question per day (seeded by date), worth a bonus star.
 - **Star rewards**: parents award stars for good behavior; kids can view but not grant.
 - **Game Shelf**: cards for apps that live outside the portal (Minecraft, Toca Life, etc.), editable from the parent panel.
+  Tapping the Minecraft card opens the installed Minecraft app directly.
 - **Mini the unicorn**: a custom SVG mascot, drifting unicorns in the sky, and a hand-drawn unicorn app icon.
 - **Grown-Ups panel** (PIN protected, default PIN `1234`):
   - Set name and birthdate
@@ -87,7 +88,9 @@ and Google Play Families guidelines:
 - **No purchases or real money.** In-game hearts/coins/stars are earned only
   by playing; there is nothing to buy and no loot boxes.
 - **No external links for kids.** The only outward links (Game Shelf websites)
-  are set up by a grown-up in the PIN-protected parent panel.
+  are set up by a grown-up in the PIN-protected parent panel. The one exception
+  is the built-in Minecraft card, which opens the installed Minecraft app; a
+  grown-up can hide it from the parent panel.
 - **No dark patterns.** No streak pressure, no ads disguised as buttons, no
   "come back" manipulation; pets and gardens never punish absence.
 - **Age-appropriate content.** No violence, gambling, or scary material;
@@ -102,7 +105,8 @@ and Google Play Families guidelines:
 - The PIN is a soft lock to keep little fingers out of settings, not real security.
 - Clearing Safari's website data resets the whole app, including stars, drawings, and settings.
 - Home Screen web apps store data separately from Safari tabs, so set things up in the Home Screen copy, not in a Safari tab.
-- External apps cannot be launched from a web page reliably, so shelf cards show a friendly "ask a grown-up" message plus an optional web link you configure.
+- The Minecraft card opens the app through its `minecraft://` link. If Minecraft is not installed or iOS blocks the launch, the card shows a friendly "ask a grown-up" message with a Try again button.
+- Other external apps cannot be launched from a web page reliably, so their shelf cards show a friendly "ask a grown-up" message plus an optional web link you configure.
 
 ## Development
 

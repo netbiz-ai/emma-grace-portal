@@ -56,7 +56,8 @@ function hashPin(pin) {
 /* ---------------- state ---------------- */
 function defaultShelf() {
   return [
-    { id: 'minecraft', name: 'Minecraft', emoji: '⛏️', url: '', hidden: false, builtin: true },
+    // app: URL scheme that launches the installed app (Minecraft registers minecraft://).
+    { id: 'minecraft', name: 'Minecraft', emoji: '⛏️', url: '', app: 'minecraft://', hidden: false, builtin: true },
     { id: 'toca', name: 'Toca Life World', emoji: '🌍', url: '', hidden: false, builtin: true },
     { id: 'khan', name: 'Khan Academy Kids', emoji: '🎓', url: 'https://www.khanacademykids.org', hidden: false, builtin: true },
     { id: 'netflix', name: 'Netflix Playground', emoji: '🎬', url: '', hidden: false, builtin: true }
@@ -95,6 +96,12 @@ function loadState() {
       state = Object.assign(base, parsed);
       state.settings = Object.assign(defaultState().settings, parsed.settings || {});
       if (!Array.isArray(state.shelf) || !state.shelf.length) state.shelf = defaultShelf();
+      // Built-in cards pick up app links added after the data was first saved.
+      const builtins = defaultShelf();
+      state.shelf.forEach(s => {
+        const def = s.builtin && builtins.find(b => b.id === s.id);
+        if (def) s.app = def.app || '';
+      });
       // Break Time only lasts for the day it was set.
       if (state.breakActive && state.breakDate !== todayKey()) state.breakActive = false;
       return;
@@ -399,8 +406,8 @@ function renderHome() {
       c.type = 'button';
       c.innerHTML = '<span class="card-emoji">' + escapeHtml(s.emoji) + '</span>' +
         '<span class="card-name">' + escapeHtml(s.name) + '</span>' +
-        '<span class="card-desc">Lives outside the portal</span>';
-      c.onclick = () => { sndTap(); openShelfCard(s); };
+        '<span class="card-desc">' + (s.app ? 'Tap to open the app' : 'Lives outside the portal') + '</span>';
+      c.onclick = () => { sndTap(); s.app ? launchShelfApp(s) : openShelfCard(s); };
       grid.append(c);
     });
     v.append(grid);
@@ -413,13 +420,43 @@ function escapeHtml(s) {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
 }
-function openShelfCard(s) {
+// Try to open the installed app. If the page is still showing shortly after,
+// the app did not open (not installed, or the launch was blocked), so fall
+// back to the regular shelf card with a hint.
+function launchShelfApp(s) {
+  let left = false;
+  const onHide = () => { if (document.hidden) left = true; };
+  const onBlur = () => { left = true; };
+  document.addEventListener('visibilitychange', onHide);
+  window.addEventListener('pagehide', onBlur);
+  window.addEventListener('blur', onBlur);
+  setTimeout(() => {
+    document.removeEventListener('visibilitychange', onHide);
+    window.removeEventListener('pagehide', onBlur);
+    window.removeEventListener('blur', onBlur);
+    if (!left) openShelfCard(s, true);
+  }, 1500);
+  // A link click rather than location.href, so a failed launch does not
+  // leave the page stuck mid-navigation.
+  const link = document.createElement('a');
+  link.href = s.app;
+  link.click();
+}
+function openShelfCard(s, appFailed) {
   const sheet = $('#shelf-sheet');
   sheet.innerHTML = '';
   sheet.append(el('div', 'sheet-emoji', escapeHtml(s.emoji)));
   sheet.append(el('h2', null, escapeHtml(s.name)));
-  sheet.append(el('p', null, 'Ask a grown-up to open <b>' + escapeHtml(s.name) + '</b> for you!'));
+  sheet.append(el('p', null, appFailed
+    ? '<b>' + escapeHtml(s.name) + '</b> did not open. Ask a grown-up to check it is installed!'
+    : 'Ask a grown-up to open <b>' + escapeHtml(s.name) + '</b> for you!'));
   const row = el('div', 'shelf-link-row');
+  if (appFailed) {
+    const retry = el('button', 'btn btn-green btn-sm', '🔁 Try again');
+    retry.type = 'button';
+    retry.onclick = () => { $('#overlay-shelf').classList.remove('show'); launchShelfApp(s); };
+    row.append(retry);
+  }
   if (s.url && /^https?:\/\//i.test(s.url)) {
     const link = el('button', 'btn btn-green btn-sm', '🌐 Open website');
     link.type = 'button';
@@ -2724,6 +2761,7 @@ function renderParent() {
   shelfCard.append(add);
   shelfCard.append(el('p', 'hint',
     'Shelf cards remind her which apps live outside the portal. ' +
+    'Minecraft opens the installed app directly; hide it to stop that. ' +
     'Use iOS Screen Time to set hard limits on those apps - the portal cannot control them.'));
   v.append(shelfCard);
 
