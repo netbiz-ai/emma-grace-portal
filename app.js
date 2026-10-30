@@ -95,6 +95,10 @@ function loadState() {
       const base = defaultState();
       state = Object.assign(base, parsed);
       state.settings = Object.assign(defaultState().settings, parsed.settings || {});
+      // Merge nested game state too, so older saves pick up fields added later.
+      ['garden', 'keydash', 'racer', 'dressup', 'builder', 'challenge'].forEach(k => {
+        state[k] = Object.assign(defaultState()[k], parsed[k] || {});
+      });
       if (!Array.isArray(state.shelf) || !state.shelf.length) state.shelf = defaultShelf();
       // Built-in cards pick up app links added after the data was first saved.
       const builtins = defaultShelf();
@@ -1290,6 +1294,9 @@ function initPets(stage) {
   }
 
   render();
+  gameTimer = setInterval(() => {
+    if (currentView === 'game' && currentGameId === 'pets') render();
+  }, 5000);
 }
 
 /* ============================================================
@@ -1815,7 +1822,9 @@ function initKeydash(stage) {
   });
 
   function tick(t) {
-    if (mode === 'play') {
+    // Break Time and the daily limit pause the run, not just cover it.
+    const paused = state.breakActive || isLocked();
+    if (mode === 'play' && !paused) {
       const dt = Math.min(0.05, lastT ? (t - lastT) / 1000 : 0.016);
       // Taps are buffered for 150ms so early or mid-air taps still jump.
       const ev = kdStep(sim, dt, t - jumpBufferT < 150);
@@ -1823,7 +1832,7 @@ function initKeydash(stage) {
       if (ev.landed) { kdClick(sim.speed); pops.push({ x: sim.x, t: t }); }
       if (ev.fell) { mode = 'dead'; deadT = t; sndNo(); }
       if (ev.cleared) onClear();
-    } else if (mode === 'dead' && t - deadT > 900) {
+    } else if (mode === 'dead' && !paused && t - deadT > 900) {
       resetRun();
     }
     lastT = t;
@@ -2062,7 +2071,8 @@ function initRacer(stage) {
   });
 
   function tick(t) {
-    if (mode === 'play') {
+    // Break Time and the daily limit pause the race, not just cover it.
+    if (mode === 'play' && !state.breakActive && !isLocked()) {
       const dt = Math.min(0.05, lastT ? (t - lastT) / 1000 : 0.016);
       dashOff = (dashOff + run.speed * dt) % 90;
       rcStep(run, dt).forEach(ev => {
