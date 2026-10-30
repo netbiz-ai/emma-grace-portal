@@ -1,27 +1,34 @@
 # Emma-Grace's Game Portal
 
-A safe, consolidated game hub for a 6 year old's iPad, designed to grow with her until age 7.
+A safe, consolidated game hub for a child's iPad, with games and difficulty
+that grow with her from age 6 to 8 and beyond.
 Features **Mini the unicorn** as the mascot.
 It is a plain HTML/CSS/JS web app with no build step, no frameworks, and no tracking.
 
 ## What is inside
 
 - **Home screen** with big, colorful, touch-friendly cards organized by category.
-- **10 built-in mini-games** that work fully offline:
+- **15 built-in mini-games** that work fully offline:
   - Pet Pals (hatch eggs, feed/play/wash/rest your pets to earn hearts and adopt more; pets grow from Newborn to Full Grown across 5 rarity tiers)
   - Magic Garden (plant seeds, water them, and harvest for coins; crops grow in real time even while away, with rotating seed stock, weather, and rare Gold/Rainbow/Shocked mutations worth up to 100x)
   - Rainbow Racer (3-lane kart racer: tap left/right to dodge traffic, grab stars, catch turbo bolts; 3 hearts per run, best distance saved)
   - Keyboard Dash (tap to jump across giant candy keyboard keys; every key landed is +1 speed, one fall sends you back to the start; reach ENTER to escape each stage)
+  - Super Snake (the classic: swipe or use the arrow pad, eat apples to grow, speed rises with score, best score saved)
+  - Brick Blast (paddle-and-ball brick breaker: drag the paddle, tap to launch, clear levels that add rows and speed; 3 lives, best score saved)
+  - 2048 (slide and merge tiles to reach 2048; best score and biggest tile saved)
+  - Four in a Row (Connect Four against a friendly computer AI that wins when it can and blocks when it must)
+  - Word Detective (Wordle-style 5-letter word guessing with 6 tries and green/yellow/gray hints; wins and streaks saved)
   - Dress Up Studio (style an outfit for the day's theme - hat, outfit, shoes, buddy, extra, plus a "Me" picker - then earn 2-5 stars on the runway)
   - Block Builder (paint with 12 block types on a 10x7 grid; save builds to a gallery and reload them)
   - Drawing Pad (paint, save to a gallery of the last 20 drawings)
   - Memory Match (emoji card pairs)
-  - Number Quest (counting and addition)
+  - Number Quest (counting, addition, times tables and division, by age)
   - Word Wonders (missing-letter word game)
 - **Adaptive difficulty** driven by her birthdate:
   - Age 6: numbers to 10, 3-letter words, 12 memory cards
   - Age 7: addition to 20, 4-5 letter words, 16 memory cards
-  - Upgrades automatically on her 7th birthday.
+  - Age 8: times tables & division, 6-8 letter words, 20 memory cards
+  - Upgrades automatically on her birthdays.
 - **Daily Challenge**: one question per day (seeded by date), worth a bonus star.
 - **Star rewards**: parents award stars for good behavior; kids can view but not grant.
 - **Game Shelf**: cards for apps that live outside the portal (Minecraft, Toca Life, etc.), editable from the parent panel.

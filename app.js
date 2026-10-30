@@ -79,6 +79,11 @@ function defaultState() {
     racer: { best: 0, stars: 0 },  // best distance (m), lifetime stars collected
     dressup: { stars: 0, theme: 0, outfit: {} },
     builder: { cells: [], gallery: [] }, // cells: 70 block ids; gallery of saved builds
+    snake: { best: 0 },              // Super Snake best score
+    twenty48: { best: 0, tile: 0 },  // 2048 best score & biggest tile ever
+    connect4: { wins: 0, plays: 0 }, // Four in a Row record vs the computer
+    bricks: { best: 0 },             // Brick Blast best score
+    sleuth: { wins: 0, streak: 0, bestStreak: 0 }, // Word Detective
     shelf: defaultShelf(),
     challenge: { date: '', done: false },
     breakActive: false,
@@ -96,7 +101,8 @@ function loadState() {
       state = Object.assign(base, parsed);
       state.settings = Object.assign(defaultState().settings, parsed.settings || {});
       // Merge nested game state too, so older saves pick up fields added later.
-      ['garden', 'keydash', 'racer', 'dressup', 'builder', 'challenge'].forEach(k => {
+      ['garden', 'keydash', 'racer', 'dressup', 'builder', 'challenge',
+        'snake', 'twenty48', 'connect4', 'bricks', 'sleuth'].forEach(k => {
         state[k] = Object.assign(defaultState()[k], parsed[k] || {});
       });
       if (!Array.isArray(state.shelf) || !state.shelf.length) state.shelf = defaultShelf();
@@ -137,8 +143,8 @@ function ageYears() {
   if (m < 0 || (m === 0 && now.getDate() < bd.getDate())) a--;
   return a;
 }
-// Difficulty group: 6 until her 7th birthday, 7 from then on.
-function ageGroup() { return ageYears() >= 7 ? 7 : 6; }
+// Difficulty group: 6, 7, or 8, upgrading automatically on her birthdays.
+function ageGroup() { const a = ageYears(); return a >= 8 ? 8 : a >= 7 ? 7 : 6; }
 
 /* ---------------- sounds (WebAudio, no assets) ---------------- */
 let AC = null;
@@ -191,14 +197,19 @@ const GAMES = [
   { id: 'garden', name: 'Magic Garden', emoji: '🌻', cat: 'Garden', desc: 'Plant & harvest', bg: 'linear-gradient(160deg,#E3F9E5,#F7FFF3)' },
   { id: 'racer', name: 'Rainbow Racer', emoji: '🏎️', cat: 'Arcade', desc: 'Dodge & dash!', bg: 'linear-gradient(160deg,#FFE8E8,#FFF7F5)' },
   { id: 'keydash', name: 'Keyboard Dash', emoji: '⌨️', cat: 'Arcade', desc: 'Jump the keys!', bg: 'linear-gradient(160deg,#FFE9F4,#FFF9FC)' },
+  { id: 'snake', name: 'Super Snake', emoji: '🐍', cat: 'Arcade', desc: 'Eat & grow', bg: 'linear-gradient(160deg,#E3F6EE,#F4FFF9)' },
+  { id: 'bricks', name: 'Brick Blast', emoji: '🏓', cat: 'Arcade', desc: 'Bounce & smash', bg: 'linear-gradient(160deg,#E8ECFF,#F6F7FF)' },
+  { id: '2048', name: '2048', emoji: '🧮', cat: 'Puzzle', desc: 'Merge to 2048', bg: 'linear-gradient(160deg,#FFF0E3,#FFFAF3)' },
+  { id: 'connect4', name: 'Four in a Row', emoji: '🔴', cat: 'Puzzle', desc: 'Beat the computer', bg: 'linear-gradient(160deg,#E3E9FF,#F5F7FF)' },
+  { id: 'sleuth', name: 'Word Detective', emoji: '🔎', cat: 'Educational', desc: 'Crack the word', bg: 'linear-gradient(160deg,#E7F3FF,#F5FAFF)' },
   { id: 'dressup', name: 'Dress Up Studio', emoji: '👗', cat: 'Creative', desc: 'Fashion show', bg: 'linear-gradient(160deg,#FFE0EE,#FFF5FA)' },
   { id: 'builder', name: 'Block Builder', emoji: '🧱', cat: 'Creative', desc: 'Build anything', bg: 'linear-gradient(160deg,#E8F1FF,#F6FAFF)' },
   { id: 'draw', name: 'Drawing Pad', emoji: '🎨', cat: 'Creative', desc: 'Paint a picture', bg: 'linear-gradient(160deg,#FFE3F0,#FFF6FB)' },
   { id: 'memory', name: 'Memory Match', emoji: '🧠', cat: 'Puzzle', desc: 'Find the pairs', bg: 'linear-gradient(160deg,#E3F2FF,#F5FBFF)' },
-  { id: 'numbers', name: 'Number Quest', emoji: '🔢', cat: 'Educational', desc: 'Count & add', bg: 'linear-gradient(160deg,#E7F9EF,#F6FFF9)' },
+  { id: 'numbers', name: 'Number Quest', emoji: '🔢', cat: 'Educational', desc: 'Math practice', bg: 'linear-gradient(160deg,#E7F9EF,#F6FFF9)' },
   { id: 'letters', name: 'Word Wonders', emoji: '🔤', cat: 'Educational', desc: 'Letters & words', bg: 'linear-gradient(160deg,#FFF3D9,#FFFBF2)' }
 ];
-const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', racer: 'Rainbow Racer', keydash: 'Keyboard Dash', dressup: 'Dress Up Studio', builder: 'Block Builder', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
+const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', racer: 'Rainbow Racer', keydash: 'Keyboard Dash', snake: 'Super Snake', bricks: 'Brick Blast', '2048': '2048', connect4: 'Four in a Row', sleuth: 'Word Detective', dressup: 'Dress Up Studio', builder: 'Block Builder', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
 const CATS = [
   { name: 'Pets', emoji: '🐾' },
   { name: 'Garden', emoji: '🌻' },
@@ -219,6 +230,13 @@ const WORDS7 = [
   { w: 'STAR', e: '⭐' }, { w: 'MOON', e: '🌙' }, { w: 'APPLE', e: '🍎' },
   { w: 'HOUSE', e: '🏠' }, { w: 'TRAIN', e: '🚂' }, { w: 'HEART', e: '❤️' },
   { w: 'SHEEP', e: '🐑' }, { w: 'BREAD', e: '🍞' }, { w: 'TIGER', e: '🐯' }
+];
+const WORDS8 = [
+  { w: 'PLANET', e: '🪐' }, { w: 'ROCKET', e: '🚀' }, { w: 'GARDEN', e: '🌻' },
+  { w: 'TURTLE', e: '🐢' }, { w: 'JUNGLE', e: '🌴' }, { w: 'WIZARD', e: '🧙' },
+  { w: 'PENGUIN', e: '🐧' }, { w: 'DOLPHIN', e: '🐬' }, { w: 'RAINBOW', e: '🌈' },
+  { w: 'VOLCANO', e: '🌋' }, { w: 'LIBRARY', e: '📚' }, { w: 'ELEPHANT', e: '🐘' },
+  { w: 'DINOSAUR', e: '🦖' }, { w: 'MOUNTAIN', e: '⛰️' }, { w: 'COMPUTER', e: '💻' }
 ];
 
 /* ---------------- router ---------------- */
@@ -390,7 +408,6 @@ function renderHome() {
     games.forEach(g => {
       const c = el('button', 'card');
       c.type = 'button';
-      c.style.background = g.bg;
       c.innerHTML = '<span class="card-emoji">' + g.emoji + '</span>' +
         '<span class="card-name">' + g.name + '</span>' +
         '<span class="card-desc">' + g.desc + '</span>';
@@ -497,6 +514,11 @@ function startGame(id) {
   else if (id === 'garden') initGarden(stage);
   else if (id === 'racer') initRacer(stage);
   else if (id === 'keydash') initKeydash(stage);
+  else if (id === 'snake') initSnake(stage);
+  else if (id === 'bricks') initBricks(stage);
+  else if (id === '2048') init2048Game(stage);
+  else if (id === 'connect4') initConnect4(stage);
+  else if (id === 'sleuth') initSleuth(stage);
   else if (id === 'dressup') initDressup(stage);
   else if (id === 'builder') initBuilder(stage);
   else if (id === 'draw') initDraw(stage);
@@ -674,7 +696,7 @@ function initDraw(stage) {
    ============================================================ */
 function initMemory(stage) {
   const g = ageGroup();
-  const pairs = g >= 7 ? 8 : 6; // 4x4 for age 7, 4x3 for age 6
+  const pairs = g >= 8 ? 10 : g >= 7 ? 8 : 6; // 5x4 age 8, 4x4 age 7, 4x3 age 6
   const POOL = ['🐶', '🐱', '🦊', '🐸', '🐵', '🦁', '🐷', '🐰', '🦄', '🐢', '🦋', '🐠'];
   const chosen = shuffle(POOL.slice()).slice(0, pairs);
   const deck = shuffle(chosen.concat(chosen));
@@ -686,6 +708,7 @@ function initMemory(stage) {
 
   const status = el('div', 'mem-status', 'Moves: 0');
   const grid = el('div', 'mem-grid');
+  if (pairs === 10) grid.style.gridTemplateColumns = 'repeat(5, 1fr)';
   stage.append(status, grid);
 
   deck.forEach(emoji => {
@@ -771,7 +794,25 @@ function initNumbers(stage) {
     stage.append(el('div', 'progress-dots', dots()));
     let qText, emojiRow, answer, options;
 
-    if (g === 6) {
+    if (g >= 8) {
+      if (Math.random() < 0.6) {
+        // Times tables up to 12 x 12
+        const a = 2 + Math.floor(Math.random() * 11);
+        const b = 2 + Math.floor(Math.random() * 11);
+        qText = a + ' × ' + b + ' = ?';
+        emojiRow = '🧠';
+        answer = a * b;
+        options = uniqueOptions(answer, [answer + a, answer - a, answer + b, answer - b, answer + 1, answer + 10]);
+      } else {
+        // Division that always comes out whole
+        const b = 2 + Math.floor(Math.random() * 11);
+        const q = 2 + Math.floor(Math.random() * 11);
+        qText = (b * q) + ' ÷ ' + b + ' = ?';
+        emojiRow = '🧠';
+        answer = q;
+        options = uniqueOptions(answer, [answer - 1, answer + 1, answer + 2, answer - 2, answer + b, answer + 10]);
+      }
+    } else if (g === 6) {
       if (Math.random() < 0.5) {
         // Counting 1-10
         const n = 1 + Math.floor(Math.random() * 10);
@@ -848,7 +889,7 @@ function initNumbers(stage) {
 function initLetters(stage) {
   const g = ageGroup();
   const TOTAL = 5;
-  const list = g === 6 ? WORDS6 : WORDS7;
+  const list = g >= 8 ? WORDS8 : g === 6 ? WORDS6 : WORDS7;
   const words = shuffle(list.slice()).slice(0, TOTAL);
   let round = 0;
   let score = 0;
@@ -933,22 +974,30 @@ function todaysChallenge() {
   const g = ageGroup();
   const rng = mulberry32(hashStr(dk + '|' + g + '|challenge'));
   if (rng() < 0.5) {
-    let a, b;
-    if (g === 6) {
-      a = 1 + Math.floor(rng() * 6);
-      b = 1 + Math.floor(rng() * Math.max(1, 10 - a));
-    } else {
+    let a, b, answer, q;
+    if (g >= 8) {
       a = 2 + Math.floor(rng() * 9);
       b = 2 + Math.floor(rng() * 9);
+      answer = a * b;
+      q = a + ' × ' + b + ' = ?';
+    } else {
+      if (g === 6) {
+        a = 1 + Math.floor(rng() * 6);
+        b = 1 + Math.floor(rng() * Math.max(1, 10 - a));
+      } else {
+        a = 2 + Math.floor(rng() * 9);
+        b = 2 + Math.floor(rng() * 9);
+      }
+      answer = a + b;
+      q = a + ' + ' + b + ' = ?';
     }
-    const answer = a + b;
     const set = new Set([answer]);
     const cands = [answer + 1, answer - 1, answer + 2, answer - 2, answer + 3];
     for (const c of cands) { if (set.size < 4 && c > 0) set.add(c); }
     while (set.size < 4) set.add(answer + set.size + 2);
-    return { type: 'math', q: a + ' + ' + b + ' = ?', emoji: '🧮', options: shuffle(Array.from(set)), answer: answer };
+    return { type: 'math', q: q, emoji: '🧮', options: shuffle(Array.from(set)), answer: answer };
   }
-  const list = g === 6 ? WORDS6 : WORDS7;
+  const list = g >= 8 ? WORDS8 : g === 6 ? WORDS6 : WORDS7;
   const item = list[Math.floor(rng() * list.length)];
   const idx = Math.floor(rng() * item.w.length);
   const correct = item.w[idx];
@@ -1865,11 +1914,11 @@ function initKeydash(stage) {
       ctx.fillStyle = pal.top;
       ctx.fillRect(sx, KD_KEY_TOP, k.w, 14);
       ctx.fillStyle = pal.ink;
-      ctx.font = '700 20px Fredoka, sans-serif';
+      ctx.font = '700 20px Nunito, sans-serif';
       ctx.fillText(k.letter, sx + k.w / 2, KD_KEY_TOP + 27);
     }
     pops = pops.filter(p => t - p.t < 700);
-    ctx.font = '700 20px Fredoka, sans-serif';
+    ctx.font = '700 20px Nunito, sans-serif';
     for (const p of pops) {
       const a = 1 - (t - p.t) / 700;
       ctx.fillStyle = 'rgba(69, 174, 120, ' + a + ')';
@@ -1886,7 +1935,7 @@ function initKeydash(stage) {
     ctx.restore();
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#5B4B8A';
-    ctx.font = '700 22px Fredoka, sans-serif';
+    ctx.font = '700 22px Nunito, sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText('⚡ ' + Math.round(sim.speed), 16, 28);
     ctx.textAlign = 'center';
@@ -1901,7 +1950,7 @@ function initKeydash(stage) {
       ctx.fillStyle = 'rgba(255, 255, 255, 0.78)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = '#5B4B8A';
-      ctx.font = '700 34px Fredoka, sans-serif';
+      ctx.font = '700 34px Nunito, sans-serif';
       ctx.fillText('😱 Back to the start!', W / 2, H / 2);
     }
   }
@@ -2148,7 +2197,7 @@ function initRacer(stage) {
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.fillRect(12, 12, RC_W - 24, 54);
     ctx.fillStyle = '#5B4B8A';
-    ctx.font = '700 30px Fredoka, sans-serif';
+    ctx.font = '700 30px Nunito, sans-serif';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'left';
     ctx.fillText('⭐ ' + run.stars, 30, 40);
@@ -2534,6 +2583,768 @@ function initBuilder(stage) {
 }
 
 /* ============================================================
+   GAME 11: Super Snake
+   The classic. Swipe the board or use the arrow pad to steer,
+   eat apples to grow, and don't hit the walls or yourself.
+   Speed climbs gently with score; best score is saved.
+   ============================================================ */
+const SN_N = 17;
+const SN_CELL = 42;
+function initSnake(stage) {
+  const W = SN_N * SN_CELL;
+  const status = el('div', 'mem-status', '');
+  const canvas = el('canvas');
+  canvas.id = 'sn-canvas';
+  canvas.width = W;
+  canvas.height = W;
+  const pad = el('div', 'pad');
+  const panel = el('div', 'kd-panel');
+  stage.append(status, canvas, pad, panel);
+  const ctx = canvas.getContext('2d');
+
+  let snake, dir, pending, food, score;
+  let mode = 'intro'; // intro | play | over
+  let acc = 0, lastT = 0;
+  let swipe = null;
+
+  function placeFood() {
+    do {
+      food = { x: Math.floor(Math.random() * SN_N), y: Math.floor(Math.random() * SN_N) };
+    } while (snake.some(s => s.x === food.x && s.y === food.y));
+  }
+  function reset() {
+    snake = [{ x: 8, y: 8 }, { x: 7, y: 8 }, { x: 6, y: 8 }];
+    dir = { x: 1, y: 0 };
+    pending = [];
+    score = 0;
+    acc = 0;
+    placeFood();
+  }
+  function padBtn(label, fn) {
+    const b = el('button', 'pad-btn', label);
+    b.type = 'button';
+    b.setAttribute('aria-label', 'Steer ' + label);
+    b.onclick = fn;
+    return b;
+  }
+  function queueDir(x, y) {
+    if (mode !== 'play') return;
+    const last = pending.length ? pending[pending.length - 1] : dir;
+    if ((last.x === -x && last.y === -y) || (last.x === x && last.y === y)) return;
+    if (pending.length < 3) pending.push({ x: x, y: y });
+  }
+  pad.append(el('span'), padBtn('▲', () => queueDir(0, -1)), el('span'),
+    padBtn('◀', () => queueDir(-1, 0)), padBtn('▼', () => queueDir(0, 1)), padBtn('▶', () => queueDir(1, 0)));
+
+  function startPlay() { panel.style.display = 'none'; mode = 'play'; }
+  function showIntro() {
+    mode = 'intro';
+    panel.innerHTML = '';
+    panel.style.display = '';
+    panel.append(el('p', 'kd-msg',
+      'Swipe the board or tap the arrows to steer.<br>Eat 🍎 to grow. Avoid the walls and your own tail!'));
+    if (state.snake.best > 0) panel.append(el('p', 'kd-hint', '🏆 Best score: ' + state.snake.best));
+    const b = el('button', 'btn', '🐍 Start');
+    b.type = 'button';
+    b.onclick = () => { sndTap(); startPlay(); };
+    panel.append(b);
+  }
+  function gameOver() {
+    mode = 'over';
+    if (score > state.snake.best) state.snake.best = score;
+    save();
+    sndNo();
+    panel.innerHTML = '';
+    panel.style.display = '';
+    panel.append(el('p', 'kd-msg', 'Game over! You ate <b>' + score + '</b> 🍎. Best: <b>' + state.snake.best + '</b>'));
+    const b = el('button', 'btn', '🔁 Play again');
+    b.type = 'button';
+    b.onclick = () => { sndTap(); reset(); startPlay(); };
+    panel.append(b);
+  }
+  function step() {
+    if (pending.length) dir = pending.shift();
+    const h = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+    if (h.x < 0 || h.y < 0 || h.x >= SN_N || h.y >= SN_N ||
+      snake.some((s, i) => i < snake.length - 1 && s.x === h.x && s.y === h.y)) {
+      gameOver();
+      return;
+    }
+    snake.unshift(h);
+    if (h.x === food.x && h.y === food.y) {
+      score++;
+      sndGood();
+      placeFood();
+      if (score % 5 === 0) confetti(8);
+    } else {
+      snake.pop();
+    }
+  }
+  function tick(t) {
+    if (mode === 'play' && !state.breakActive && !isLocked()) {
+      const dt = Math.min(100, lastT ? t - lastT : 16);
+      acc += dt;
+      const interval = Math.max(85, 150 - score * 2);
+      while (acc >= interval && mode === 'play') {
+        acc -= interval;
+        step();
+      }
+      if (mode !== 'play') acc = 0;
+    }
+    lastT = t;
+    draw();
+    gameRaf = requestAnimationFrame(tick);
+  }
+  function draw() {
+    status.textContent = '🍎 ' + score + ' · 🏆 Best: ' + Math.max(state.snake.best, score);
+    ctx.fillStyle = '#F8FAFC';
+    ctx.fillRect(0, 0, W, W);
+    ctx.strokeStyle = '#EDF2F7';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < SN_N; i++) {
+      ctx.beginPath(); ctx.moveTo(i * SN_CELL, 0); ctx.lineTo(i * SN_CELL, W); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * SN_CELL); ctx.lineTo(W, i * SN_CELL); ctx.stroke();
+    }
+    ctx.font = '30px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🍎', food.x * SN_CELL + SN_CELL / 2, food.y * SN_CELL + SN_CELL / 2 + 2);
+    snake.forEach((s, i) => {
+      ctx.fillStyle = i === 0 ? '#4338CA' : '#6366F1';
+      ctx.fillRect(s.x * SN_CELL + 3, s.y * SN_CELL + 3, SN_CELL - 6, SN_CELL - 6);
+    });
+    if (mode === 'over') {
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.fillRect(0, 0, W, W);
+      ctx.fillStyle = '#1E293B';
+      ctx.font = '700 44px Nunito, sans-serif';
+      ctx.fillText('Game over!', W / 2, W / 2);
+    }
+  }
+  canvas.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (mode === 'intro') { startPlay(); return; }
+    swipe = { x: e.clientX, y: e.clientY };
+  });
+  canvas.addEventListener('pointerup', e => {
+    if (!swipe || mode !== 'play') { swipe = null; return; }
+    const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+    swipe = null;
+    if (Math.abs(dx) < 20 && Math.abs(dy) < 20) return;
+    if (Math.abs(dx) > Math.abs(dy)) queueDir(dx > 0 ? 1 : -1, 0);
+    else queueDir(0, dy > 0 ? 1 : -1);
+  });
+
+  reset();
+  showIntro();
+  draw();
+  gameRaf = requestAnimationFrame(tick);
+}
+
+/* ============================================================
+   GAME 12: 2048
+   Slide the tiles with a swipe or the arrow pad. Matching
+   numbers merge; every merge adds to your score. Reach 2048!
+   Best score and biggest tile are saved.
+   ============================================================ */
+function init2048Game(stage) {
+  let cells, score, over, wonShown;
+  const status = el('div', 'mem-status', '');
+  const grid = el('div', 't2-grid');
+  const cellEls = [];
+  for (let i = 0; i < 16; i++) {
+    const c = el('div', 't2-cell');
+    grid.append(c);
+    cellEls.push(c);
+  }
+  const pad = el('div', 'pad');
+  const panel = el('div', 'kd-panel');
+  const msg = el('p', 'kd-msg', 'Swipe the board or tap the arrows. Merge matching numbers!');
+  const again = el('button', 'btn', '🔄 New game');
+  again.type = 'button';
+  again.onclick = () => { sndTap(); reset(); };
+  panel.append(msg, again);
+  stage.append(status, grid, pad, panel);
+
+  function padBtn(label, fn) {
+    const b = el('button', 'pad-btn', label);
+    b.type = 'button';
+    b.setAttribute('aria-label', 'Slide ' + label);
+    b.onclick = fn;
+    return b;
+  }
+  pad.append(el('span'), padBtn('▲', () => move(1)), el('span'),
+    padBtn('◀', () => move(0)), padBtn('▼', () => move(3)), padBtn('▶', () => move(2)));
+
+  function addTile() {
+    const empty = [];
+    cells.forEach((v, i) => { if (!v) empty.push(i); });
+    if (!empty.length) return;
+    cells[empty[Math.floor(Math.random() * empty.length)]] = Math.random() < 0.9 ? 2 : 4;
+  }
+  function slide(vals) {
+    const nums = vals.filter(v => v);
+    let gained = 0;
+    for (let i = 0; i < nums.length - 1; i++) {
+      if (nums[i] === nums[i + 1]) {
+        nums[i] *= 2;
+        gained += nums[i];
+        nums.splice(i + 1, 1);
+      }
+    }
+    while (nums.length < 4) nums.push(0);
+    return { vals: nums, gained: gained };
+  }
+  function movesAvailable() {
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 4; c++) {
+        const v = cells[r * 4 + c];
+        if (!v) return true;
+        if (c < 3 && cells[r * 4 + c + 1] === v) return true;
+        if (r < 3 && cells[(r + 1) * 4 + c] === v) return true;
+      }
+    }
+    return false;
+  }
+  function move(dir) { // 0 left 1 up 2 right 3 down
+    if (over) return;
+    let moved = false, gained = 0;
+    for (let line = 0; line < 4; line++) {
+      const idxs = [];
+      for (let k = 0; k < 4; k++) {
+        if (dir === 0) idxs.push(line * 4 + k);
+        else if (dir === 1) idxs.push(k * 4 + line);
+        else if (dir === 2) idxs.push(line * 4 + (3 - k));
+        else idxs.push((3 - k) * 4 + line);
+      }
+      const before = idxs.map(i => cells[i]);
+      const res = slide(before);
+      gained += res.gained;
+      idxs.forEach((cellIdx, k) => { cells[cellIdx] = res.vals[k]; });
+      if (before.join(',') !== res.vals.join(',')) moved = true;
+    }
+    if (!moved) return;
+    score += gained;
+    addTile();
+    if (gained > 0) sndGood(); else sndTap();
+    if (!wonShown && cells.some(v => v >= 2048)) {
+      wonShown = true;
+      confetti(36);
+      sndWin();
+    }
+    if (score > state.twenty48.best) state.twenty48.best = score;
+    state.twenty48.tile = Math.max(state.twenty48.tile, Math.max.apply(null, cells));
+    save();
+    render();
+    if (!movesAvailable()) {
+      over = true;
+      msg.textContent = 'No more moves! Final score: ' + score + '. Tap New game to try again.';
+      sndNo();
+    }
+  }
+  function render() {
+    cellEls.forEach((c, i) => {
+      const v = cells[i];
+      c.textContent = v || '';
+      c.className = 't2-cell' + (v ? (v > 2048 ? ' t2-super' : ' t2-v' + v) : '');
+    });
+    status.textContent = 'Score: ' + score + ' · 🏆 Best: ' + Math.max(state.twenty48.best, score) +
+      (state.twenty48.tile ? ' · Biggest tile: ' + Math.max(state.twenty48.tile, Math.max.apply(null, cells)) : '');
+  }
+  function reset() {
+    cells = new Array(16).fill(0);
+    score = 0;
+    over = false;
+    wonShown = false;
+    msg.textContent = 'Swipe the board or tap the arrows. Merge matching numbers!';
+    addTile();
+    addTile();
+    render();
+  }
+  let swipe = null;
+  grid.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    swipe = { x: e.clientX, y: e.clientY };
+  });
+  grid.addEventListener('pointerup', e => {
+    if (!swipe) return;
+    const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+    swipe = null;
+    if (Math.abs(dx) < 24 && Math.abs(dy) < 24) return;
+    if (Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? 2 : 0);
+    else move(dy > 0 ? 3 : 1);
+  });
+
+  reset();
+}
+
+/* ============================================================
+   GAME 13: Four in a Row (Connect Four)
+   Drop discs against the computer. The AI wins when it can,
+   blocks when it must, and otherwise favors the center -
+   clever enough to be fun, kind enough to be beatable.
+   ============================================================ */
+function c4Winner(b) {
+  const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+  for (let r = 0; r < 6; r++) {
+    for (let c = 0; c < 7; c++) {
+      const p = b[r][c];
+      if (!p) continue;
+      for (const [dr, dc] of dirs) {
+        let n = 1;
+        while (n < 4) {
+          const rr = r + dr * n, cc = c + dc * n;
+          if (rr < 0 || rr > 5 || cc < 0 || cc > 6 || b[rr][cc] !== p) break;
+          n++;
+        }
+        if (n === 4) return p;
+      }
+    }
+  }
+  return 0;
+}
+function c4Drop(b, c, p) {
+  for (let r = 5; r >= 0; r--) {
+    if (!b[r][c]) { b[r][c] = p; return r; }
+  }
+  return -1;
+}
+function c4BestMove(b) {
+  const valid = [];
+  for (let c = 0; c < 7; c++) if (!b[0][c]) valid.push(c);
+  // Win now if possible.
+  for (const c of valid) {
+    const copy = b.map(row => row.slice());
+    c4Drop(copy, c, 2);
+    if (c4Winner(copy) === 2) return c;
+  }
+  // Block the player's immediate win.
+  for (const c of valid) {
+    const copy = b.map(row => row.slice());
+    c4Drop(copy, c, 1);
+    if (c4Winner(copy) === 1) return c;
+  }
+  if (Math.random() < 0.2) return valid[Math.floor(Math.random() * valid.length)];
+  const order = [3, 2, 4, 1, 5, 0, 6];
+  return order.find(c => valid.includes(c));
+}
+function initConnect4(stage) {
+  let board, turn, over, thinking, gameId = 0;
+  const status = el('div', 'mem-status', '');
+  const grid = el('div', 'c4-grid');
+  const cellEls = [];
+  for (let r = 0; r < 6; r++) {
+    for (let c = 0; c < 7; c++) {
+      const cell = el('div', 'c4-cell');
+      cell.setAttribute('role', 'button');
+      cell.setAttribute('aria-label', 'Drop in column ' + (c + 1));
+      cell.onclick = () => play(c);
+      grid.append(cell);
+      cellEls.push(cell);
+    }
+  }
+  const panel = el('div', 'kd-panel');
+  const again = el('button', 'btn', '🔄 New game');
+  again.type = 'button';
+  again.onclick = () => { sndTap(); reset(); };
+  panel.append(again);
+  stage.append(status, grid, panel);
+
+  function render() {
+    cellEls.forEach((cell, i) => {
+      const r = Math.floor(i / 7), c = i % 7;
+      const v = board[r][c];
+      cell.className = 'c4-cell' + (v === 1 ? ' p1' : v === 2 ? ' p2' : '');
+    });
+  }
+  function finish(w) {
+    over = true;
+    state.connect4.plays++;
+    if (w === 1) {
+      state.connect4.wins++;
+      status.textContent = '🎉 Four in a row - you win! 🏆';
+      sndWin();
+      confetti(30);
+    } else if (w === 2) {
+      status.textContent = 'The computer got four. So close - rematch!';
+      sndGood();
+    } else {
+      status.textContent = 'A draw! Nobody got four. Go again!';
+      sndGood();
+    }
+    save();
+  }
+  function afterMove() {
+    render();
+    const w = c4Winner(board);
+    if (w) { finish(w); return true; }
+    if (board[0].every(v => v)) { finish(0); return true; }
+    return false;
+  }
+  function play(c) {
+    if (over || thinking || turn !== 1) return;
+    if (board[0][c]) { sndNo(); return; }
+    c4Drop(board, c, 1);
+    sndTap();
+    if (afterMove()) return;
+    turn = 2;
+    thinking = true;
+    status.textContent = '🤖 Computer is thinking…';
+    const id = gameId;
+    setTimeout(() => {
+      if (id !== gameId || over) return;
+      c4Drop(board, c4BestMove(board), 2);
+      thinking = false;
+      if (!afterMove()) {
+        turn = 1;
+        status.textContent = 'Your turn - you are 🔴';
+      }
+    }, 450);
+  }
+  function reset() {
+    gameId++;
+    board = Array.from({ length: 6 }, () => Array(7).fill(0));
+    turn = 1;
+    over = false;
+    thinking = false;
+    status.textContent = 'Your turn - you are 🔴. Tap a column!';
+    render();
+  }
+  reset();
+}
+
+/* ============================================================
+   GAME 14: Brick Blast
+   Drag the paddle, tap to launch, and clear every brick.
+   Each level adds a row and a little speed. Three lives;
+   best score is saved.
+   ============================================================ */
+const BK_W = 760;
+const BK_H = 560;
+const BK_COLORS = ['#F87171', '#FB923C', '#FBBF24', '#34D399', '#60A5FA', '#A78BFA', '#F472B6'];
+function initBricks(stage) {
+  const canvas = el('canvas');
+  canvas.id = 'bk-canvas';
+  canvas.width = BK_W;
+  canvas.height = BK_H;
+  const panel = el('div', 'kd-panel');
+  stage.append(canvas, panel);
+  const ctx = canvas.getContext('2d');
+
+  const paddle = { x: BK_W / 2, w: 120, h: 14, y: BK_H - 36 };
+  let ball, bricks, score, lives, level, speed;
+  let mode = 'intro'; // intro | play | over
+  let lastT = 0;
+
+  function buildBricks() {
+    bricks = [];
+    const rows = Math.min(4 + level, 7);
+    const cols = 8, bw = 74, bh = 24, gap = 10;
+    const offX = (BK_W - (cols * bw + (cols - 1) * gap)) / 2;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        bricks.push({
+          x: offX + c * (bw + gap), y: 64 + r * (bh + gap),
+          w: bw, h: bh, color: BK_COLORS[r % BK_COLORS.length], alive: true
+        });
+      }
+    }
+  }
+  function stickBall() {
+    ball = { x: paddle.x, y: paddle.y - 12, vx: 0, vy: 0, r: 9, stuck: true };
+  }
+  function setupLevel() {
+    speed = Math.min(520, 340 + (level - 1) * 30);
+    buildBricks();
+    stickBall();
+  }
+  function reset() {
+    score = 0;
+    lives = 3;
+    level = 1;
+    setupLevel();
+  }
+  function startPlay() { panel.style.display = 'none'; mode = 'play'; }
+  function showIntro() {
+    mode = 'intro';
+    panel.innerHTML = '';
+    panel.style.display = '';
+    panel.append(el('p', 'kd-msg',
+      'Drag to move the paddle. Tap to launch the ball!<br>Clear every brick to reach the next level.'));
+    if (state.bricks.best > 0) panel.append(el('p', 'kd-hint', '🏆 Best score: ' + state.bricks.best));
+    const b = el('button', 'btn', '🏓 Start');
+    b.type = 'button';
+    b.onclick = () => { sndTap(); startPlay(); };
+    panel.append(b);
+  }
+  function gameOver() {
+    mode = 'over';
+    if (score > state.bricks.best) state.bricks.best = score;
+    save();
+    sndNo();
+    panel.innerHTML = '';
+    panel.style.display = '';
+    panel.append(el('p', 'kd-msg',
+      'Out of balls! Score: <b>' + score + '</b> · Level <b>' + level + '</b> · Best: <b>' + state.bricks.best + '</b>'));
+    const b = el('button', 'btn', '🔁 Play again');
+    b.type = 'button';
+    b.onclick = () => { sndTap(); reset(); startPlay(); };
+    panel.append(b);
+  }
+  function launch() {
+    if (!ball.stuck) return;
+    ball.stuck = false;
+    ball.vx = speed * 0.45;
+    ball.vy = -Math.sqrt(speed * speed - ball.vx * ball.vx);
+    sndTap();
+  }
+  function loseLife() {
+    lives--;
+    sndNo();
+    if (lives <= 0) { gameOver(); return; }
+    stickBall();
+  }
+  function stepPhysics(dt) {
+    ball.x += ball.vx * dt;
+    ball.y += ball.vy * dt;
+    if (ball.x < ball.r) { ball.x = ball.r; ball.vx = Math.abs(ball.vx); }
+    if (ball.x > BK_W - ball.r) { ball.x = BK_W - ball.r; ball.vx = -Math.abs(ball.vx); }
+    if (ball.y < ball.r) { ball.y = ball.r; ball.vy = Math.abs(ball.vy); }
+    if (ball.y - ball.r > BK_H) { loseLife(); return; }
+    if (ball.vy > 0 && ball.y + ball.r >= paddle.y && ball.y + ball.r <= paddle.y + paddle.h + 14 &&
+      Math.abs(ball.x - paddle.x) <= paddle.w / 2 + ball.r) {
+      ball.y = paddle.y - ball.r;
+      const rel = Math.max(-1, Math.min(1, (ball.x - paddle.x) / (paddle.w / 2)));
+      const angle = rel * 1.05;
+      ball.vx = speed * Math.sin(angle);
+      ball.vy = -Math.abs(speed * Math.cos(angle));
+      beep(520, 0.05, 'triangle', 0.07);
+    }
+    for (const b of bricks) {
+      if (!b.alive) continue;
+      const nx = Math.max(b.x, Math.min(ball.x, b.x + b.w));
+      const ny = Math.max(b.y, Math.min(ball.y, b.y + b.h));
+      if ((ball.x - nx) * (ball.x - nx) + (ball.y - ny) * (ball.y - ny) < ball.r * ball.r) {
+        b.alive = false;
+        score += 10;
+        ball.vy = -ball.vy;
+        beep(700 + Math.random() * 300, 0.05, 'square', 0.05);
+        break;
+      }
+    }
+    if (bricks.every(b => !b.alive)) {
+      score += 50;
+      level++;
+      setupLevel();
+      confetti(20);
+      sndWin();
+    }
+  }
+  function tick(t) {
+    if (mode === 'play' && !state.breakActive && !isLocked()) {
+      const dt = Math.min(0.03, lastT ? (t - lastT) / 1000 : 0.016);
+      if (ball.stuck) {
+        ball.x = paddle.x;
+        ball.y = paddle.y - 12;
+      } else {
+        stepPhysics(dt / 2);
+        if (mode === 'play' && !ball.stuck) stepPhysics(dt / 2);
+      }
+    }
+    lastT = t;
+    draw();
+    gameRaf = requestAnimationFrame(tick);
+  }
+  function draw() {
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(0, 0, BK_W, BK_H);
+    for (const b of bricks) {
+      if (!b.alive) continue;
+      ctx.fillStyle = b.color;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+    }
+    ctx.fillStyle = '#F8FAFC';
+    ctx.fillRect(paddle.x - paddle.w / 2, paddle.y, paddle.w, paddle.h);
+    ctx.fillStyle = '#FBBF24';
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#F8FAFC';
+    ctx.font = '700 22px Nunito, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText('⭐ ' + score, 18, 26);
+    ctx.textAlign = 'center';
+    ctx.fillText('Level ' + level, BK_W / 2, 26);
+    ctx.textAlign = 'right';
+    ctx.fillText('❤️'.repeat(Math.max(0, lives)), BK_W - 18, 26);
+    if (mode === 'play' && ball.stuck) {
+      ctx.textAlign = 'center';
+      ctx.font = '600 24px Nunito, sans-serif';
+      ctx.fillText('Tap to launch!', BK_W / 2, BK_H / 2 + 60);
+    }
+  }
+  function movePaddle(e) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (BK_W / rect.width);
+    paddle.x = Math.max(paddle.w / 2, Math.min(BK_W - paddle.w / 2, x));
+  }
+  canvas.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (mode === 'intro') { startPlay(); return; }
+    if (mode !== 'play') return;
+    movePaddle(e);
+    launch();
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (mode !== 'play') return;
+    movePaddle(e);
+  });
+
+  reset();
+  showIntro();
+  draw();
+  gameRaf = requestAnimationFrame(tick);
+}
+
+/* ============================================================
+   GAME 15: Word Detective
+   A Wordle-style mystery: guess the 5-letter word in six
+   tries. Green = right letter, right spot. Yellow = right
+   letter, wrong spot. Gray = not in the word. Every answer
+   is a kid-friendly word; wins and streaks are saved.
+   ============================================================ */
+const SLEUTH_WORDS = [
+  'APPLE', 'BEACH', 'BRAVE', 'BREAD', 'BUNNY', 'CANDY', 'CLOUD', 'CROWN',
+  'DANCE', 'DREAM', 'EAGLE', 'FLAME', 'FUNNY', 'GRAPE', 'HEART', 'HONEY',
+  'HORSE', 'HOUSE', 'IVORY', 'JOKER', 'KITTY', 'KOALA', 'LEMON', 'MAGIC',
+  'MONEY', 'MOUSE', 'NURSE', 'OCEAN', 'PIANO', 'PIZZA', 'PLANT', 'PUPPY',
+  'QUEEN', 'RIVER', 'ROBOT', 'SHEEP', 'SMILE', 'SPARK', 'SUNNY', 'TIGER',
+  'TRAIN', 'UNCLE', 'VOICE', 'WHALE', 'WHEEL', 'YACHT', 'ZEBRA'
+];
+function sleuthScore(guess, answer) {
+  const res = new Array(5).fill('absent');
+  const counts = {};
+  for (let i = 0; i < 5; i++) {
+    if (guess[i] === answer[i]) res[i] = 'exact';
+    else counts[answer[i]] = (counts[answer[i]] || 0) + 1;
+  }
+  for (let i = 0; i < 5; i++) {
+    if (res[i] === 'exact') continue;
+    if (counts[guess[i]] > 0) {
+      res[i] = 'present';
+      counts[guess[i]]--;
+    }
+  }
+  return res;
+}
+function initSleuth(stage) {
+  const answer = SLEUTH_WORDS[Math.floor(Math.random() * SLEUTH_WORDS.length)];
+  let row = 0, col = 0, over = false;
+  const keyState = {}; // letter -> absent | present | exact (best so far)
+  const status = el('div', 'mem-status', '');
+  const grid = el('div', 'ws-grid');
+  const cellEls = [];
+  for (let i = 0; i < 30; i++) {
+    const c = el('div', 'ws-cell');
+    grid.append(c);
+    cellEls.push(c);
+  }
+  const kbd = el('div', 'ws-kbd');
+  const panel = el('div', 'kd-panel');
+  const msg = el('p', 'kd-msg', '');
+  const again = el('button', 'btn', '🔎 Next word');
+  again.type = 'button';
+  again.style.display = 'none';
+  again.onclick = () => { sndTap(); startGame('sleuth'); };
+  panel.append(msg, again);
+  stage.append(status, grid, kbd, panel);
+
+  const keyEls = {};
+  function makeKey(label, fn, wide) {
+    const b = el('button', 'ws-key' + (wide ? ' wide' : ''), label);
+    b.type = 'button';
+    b.onclick = fn;
+    return b;
+  }
+  ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'].forEach((letters, ri) => {
+    const line = el('div', 'ws-kbd-row');
+    if (ri === 2) line.append(makeKey('ENTER', submit, true));
+    for (const L of letters) {
+      const b = makeKey(L, () => typeLetter(L));
+      keyEls[L] = b;
+      line.append(b);
+    }
+    if (ri === 2) line.append(makeKey('⌫', backspace, true));
+    kbd.append(line);
+  });
+
+  function typeLetter(L) {
+    if (over || col >= 5) return;
+    cellEls[row * 5 + col].textContent = L;
+    col++;
+    sndTap();
+  }
+  function backspace() {
+    if (over || col <= 0) return;
+    col--;
+    cellEls[row * 5 + col].textContent = '';
+  }
+  function currentGuess() {
+    let s = '';
+    for (let i = 0; i < 5; i++) s += cellEls[row * 5 + i].textContent;
+    return s;
+  }
+  function renderKeys() {
+    for (const L in keyEls) {
+      const st = keyState[L];
+      keyEls[L].className = 'ws-key' + (st ? ' ' + st : '');
+    }
+  }
+  function renderStatus() {
+    status.textContent = '🔎 ' + (6 - row) + ' tries left · Wins: ' + state.sleuth.wins +
+      ' · Streak: ' + state.sleuth.streak + ' 🔥';
+  }
+  function submit() {
+    if (over) return;
+    if (col < 5) { sndNo(); return; }
+    const guess = currentGuess();
+    const res = sleuthScore(guess, answer);
+    for (let i = 0; i < 5; i++) {
+      const cell = cellEls[row * 5 + i];
+      cell.classList.add(res[i]);
+      const L = guess[i];
+      const rank = { absent: 1, present: 2, exact: 3 };
+      if (!keyState[L] || rank[res[i]] > rank[keyState[L]]) keyState[L] = res[i];
+    }
+    renderKeys();
+    if (guess === answer) {
+      over = true;
+      state.sleuth.wins++;
+      state.sleuth.streak++;
+      state.sleuth.bestStreak = Math.max(state.sleuth.bestStreak, state.sleuth.streak);
+      msg.textContent = '🎉 You cracked it in ' + (row + 1) + ' ' + (row === 0 ? 'try' : 'tries') + '! The word was ' + answer + '.';
+      again.style.display = '';
+      confetti(24);
+      sndWin();
+    } else if (row === 5) {
+      over = true;
+      state.sleuth.streak = 0;
+      msg.textContent = 'The word was ' + answer + '. Next case, detective! 🔎';
+      again.style.display = '';
+      sndGood();
+    } else {
+      row++;
+      col = 0;
+      sndTap();
+    }
+    save();
+    renderStatus();
+  }
+  renderStatus();
+}
+
+/* ============================================================
    Stars view
    ============================================================ */
 function renderStars() {
@@ -2613,7 +3424,8 @@ function renderParent() {
     'Current age: ' + ageYears() + ' → difficulty level "' + ageGroup() + '". ' +
     'Level 6: numbers to 10, 3-letter words, 12 memory cards. ' +
     'Level 7: addition to 20, 4-5 letter words, 16 memory cards. ' +
-    'It upgrades automatically on her 7th birthday.'));
+    'Level 8: times tables & division, 6-8 letter words, 20 memory cards. ' +
+    'It upgrades automatically on her birthdays.'));
   v.append(profile);
 
   // --- Time ---
@@ -2844,22 +3656,6 @@ function buildSky() {
     d.style.animationDuration = c.dur + 's';
     d.style.animationDelay = (-Math.random() * c.dur) + 's';
     sky.append(d);
-  });
-  for (let i = 0; i < 14; i++) {
-    const s = el('span', 'tw', '✦');
-    s.style.left = Math.random() * 100 + '%';
-    s.style.top = Math.random() * 100 + '%';
-    s.style.fontSize = (8 + Math.random() * 10) + 'px';
-    s.style.animationDelay = (Math.random() * 2.6) + 's';
-    sky.append(s);
-  }
-  // A couple of Minis drifting by
-  [{ top: 12, dur: 150 }, { top: 48, dur: 190 }].forEach(u => {
-    const s = el('span', 'uni', '🦄');
-    s.style.top = u.top + '%';
-    s.style.animationDuration = u.dur + 's';
-    s.style.animationDelay = (-Math.random() * u.dur) + 's';
-    sky.append(s);
   });
 }
 
