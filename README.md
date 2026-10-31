@@ -8,7 +8,7 @@ It is a plain HTML/CSS/JS web app with no build step, no frameworks, and no trac
 ## What is inside
 
 - **Home screen** with big, colorful, touch-friendly cards organized by category.
-- **15 built-in mini-games** that work fully offline:
+- **16 built-in mini-games** that work fully offline:
   - Pet Pals (hatch eggs, feed/play/wash/rest your pets to earn hearts and adopt more; pets grow from Newborn to Full Grown across 5 rarity tiers)
   - Magic Garden (plant seeds, water them, and harvest for coins; crops grow in real time even while away, with rotating seed stock, weather, and rare Gold/Rainbow/Shocked mutations worth up to 100x)
   - Rainbow Racer (3-lane kart racer: tap left/right to dodge traffic, grab stars, catch turbo bolts; 3 hearts per run, best distance saved)
@@ -17,6 +17,7 @@ It is a plain HTML/CSS/JS web app with no build step, no frameworks, and no trac
   - Brick Blast (paddle-and-ball brick breaker: drag the paddle, tap to launch, clear levels that add rows and speed; 3 lives, best score saved)
   - 2048 (slide and merge tiles to reach 2048; best score and biggest tile saved)
   - Four in a Row (Connect Four against a friendly computer AI that wins when it can and blocks when it must)
+  - Picture Puzzle (rebuild unicorn, space, and ocean pictures in 3x3 or 4x4 sliding puzzles; every shuffle is solvable and best move counts are saved)
   - Word Detective (Wordle-style 5-letter word guessing with 6 tries and green/yellow/gray hints; wins and streaks saved)
   - Dress Up Studio (style an outfit for the day's theme - hat, outfit, shoes, buddy, extra, plus a "Me" picker - then earn 2-5 stars on the runway)
   - Block Builder (paint with 12 block types on a 10x7 grid; save builds to a gallery and reload them)

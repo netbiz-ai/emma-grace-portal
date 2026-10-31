@@ -1,7 +1,7 @@
 'use strict';
 /* ============================================================
    Emma's Game Portal
-   A safe, consolidated game hub for a 6-7 year old.
+   A safe, consolidated game hub for a 6-8 year old.
    All state lives in localStorage. No tracking, no network
    calls except Google Fonts.
    ============================================================ */
@@ -84,6 +84,7 @@ function defaultState() {
     connect4: { wins: 0, plays: 0 }, // Four in a Row record vs the computer
     bricks: { best: 0 },             // Brick Blast best score
     sleuth: { wins: 0, streak: 0, bestStreak: 0 }, // Word Detective
+    picturePuzzle: { plays: 0, best3: 0, best4: 0 }, // Sliding picture puzzle records
     shelf: defaultShelf(),
     challenge: { date: '', done: false },
     breakActive: false,
@@ -102,7 +103,7 @@ function loadState() {
       state.settings = Object.assign(defaultState().settings, parsed.settings || {});
       // Merge nested game state too, so older saves pick up fields added later.
       ['garden', 'keydash', 'racer', 'dressup', 'builder', 'challenge',
-        'snake', 'twenty48', 'connect4', 'bricks', 'sleuth'].forEach(k => {
+        'snake', 'twenty48', 'connect4', 'bricks', 'sleuth', 'picturePuzzle'].forEach(k => {
         state[k] = Object.assign(defaultState()[k], parsed[k] || {});
       });
       if (!Array.isArray(state.shelf) || !state.shelf.length) state.shelf = defaultShelf();
@@ -201,6 +202,7 @@ const GAMES = [
   { id: 'bricks', name: 'Brick Blast', emoji: '🏓', cat: 'Arcade', desc: 'Bounce & smash', bg: 'linear-gradient(160deg,#E8ECFF,#F6F7FF)' },
   { id: '2048', name: '2048', emoji: '🧮', cat: 'Puzzle', desc: 'Merge to 2048', bg: 'linear-gradient(160deg,#FFF0E3,#FFFAF3)' },
   { id: 'connect4', name: 'Four in a Row', emoji: '🔴', cat: 'Puzzle', desc: 'Beat the computer', bg: 'linear-gradient(160deg,#E3E9FF,#F5F7FF)' },
+  { id: 'picture', name: 'Picture Puzzle', emoji: '🧩', cat: 'Puzzle', desc: 'Slide the picture together', bg: 'linear-gradient(160deg,#EDE9FE,#FAF8FF)' },
   { id: 'sleuth', name: 'Word Detective', emoji: '🔎', cat: 'Educational', desc: 'Crack the word', bg: 'linear-gradient(160deg,#E7F3FF,#F5FAFF)' },
   { id: 'dressup', name: 'Dress Up Studio', emoji: '👗', cat: 'Creative', desc: 'Fashion show', bg: 'linear-gradient(160deg,#FFE0EE,#FFF5FA)' },
   { id: 'builder', name: 'Block Builder', emoji: '🧱', cat: 'Creative', desc: 'Build anything', bg: 'linear-gradient(160deg,#E8F1FF,#F6FAFF)' },
@@ -209,7 +211,7 @@ const GAMES = [
   { id: 'numbers', name: 'Number Quest', emoji: '🔢', cat: 'Educational', desc: 'Math practice', bg: 'linear-gradient(160deg,#E7F9EF,#F6FFF9)' },
   { id: 'letters', name: 'Word Wonders', emoji: '🔤', cat: 'Educational', desc: 'Letters & words', bg: 'linear-gradient(160deg,#FFF3D9,#FFFBF2)' }
 ];
-const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', racer: 'Rainbow Racer', keydash: 'Keyboard Dash', snake: 'Super Snake', bricks: 'Brick Blast', '2048': '2048', connect4: 'Four in a Row', sleuth: 'Word Detective', dressup: 'Dress Up Studio', builder: 'Block Builder', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
+const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', racer: 'Rainbow Racer', keydash: 'Keyboard Dash', snake: 'Super Snake', bricks: 'Brick Blast', '2048': '2048', connect4: 'Four in a Row', picture: 'Picture Puzzle', sleuth: 'Word Detective', dressup: 'Dress Up Studio', builder: 'Block Builder', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
 const CATS = [
   { name: 'Pets', emoji: '🐾' },
   { name: 'Garden', emoji: '🌻' },
@@ -518,6 +520,7 @@ function startGame(id) {
   else if (id === 'bricks') initBricks(stage);
   else if (id === '2048') init2048Game(stage);
   else if (id === 'connect4') initConnect4(stage);
+  else if (id === 'picture') initPicturePuzzle(stage);
   else if (id === 'sleuth') initSleuth(stage);
   else if (id === 'dressup') initDressup(stage);
   else if (id === 'builder') initBuilder(stage);
@@ -3342,6 +3345,189 @@ function initSleuth(stage) {
     renderStatus();
   }
   renderStatus();
+}
+
+/* ============================================================
+   GAME 16: Picture Puzzle
+   Slide the tiles to rebuild a colorful picture. Every shuffle
+   uses legal moves, so every puzzle can always be solved.
+   ============================================================ */
+const PICTURE_SCENES = [
+  {
+    name: 'Unicorn', emoji: '🦄',
+    art: '<defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#C4B5FD"/><stop offset="1" stop-color="#FBCFE8"/></linearGradient></defs><rect width="400" height="400" fill="url(#sky)"/><circle cx="72" cy="72" r="34" fill="#FDE68A"/><path d="M0 300 Q100 220 200 300 T400 300 V400 H0Z" fill="#86EFAC"/><path d="M0 340 Q100 280 200 340 T400 340 V400 H0Z" fill="#4ADE80"/><text x="200" y="265" font-size="180" text-anchor="middle">🦄</text><text x="325" y="105" font-size="52" text-anchor="middle">⭐</text><text x="78" y="200" font-size="44" text-anchor="middle">🌈</text>'
+  },
+  {
+    name: 'Space', emoji: '🚀',
+    art: '<rect width="400" height="400" fill="#172554"/><circle cx="70" cy="80" r="5" fill="#fff"/><circle cx="320" cy="60" r="6" fill="#fff"/><circle cx="350" cy="190" r="4" fill="#fff"/><circle cx="100" cy="230" r="4" fill="#fff"/><circle cx="295" cy="315" r="65" fill="#F59E0B"/><path d="M225 330 Q295 275 365 330" fill="none" stroke="#FDE68A" stroke-width="16"/><text x="180" y="240" font-size="150" text-anchor="middle">🚀</text><text x="80" y="160" font-size="58" text-anchor="middle">🪐</text><text x="310" y="140" font-size="45" text-anchor="middle">⭐</text>'
+  },
+  {
+    name: 'Ocean', emoji: '🐬',
+    art: '<defs><linearGradient id="sea" x2="0" y2="1"><stop stop-color="#67E8F9"/><stop offset="1" stop-color="#2563EB"/></linearGradient></defs><rect width="400" height="400" fill="url(#sea)"/><path d="M0 340 Q70 280 140 340 T280 340 T420 340 V400 H0Z" fill="#FDE68A"/><text x="195" y="235" font-size="145" text-anchor="middle">🐬</text><text x="75" y="315" font-size="70" text-anchor="middle">🐠</text><text x="330" y="330" font-size="65" text-anchor="middle">🐢</text><circle cx="315" cy="90" r="18" fill="#A5F3FC"/><circle cx="345" cy="45" r="10" fill="#A5F3FC"/><circle cx="80" cy="100" r="14" fill="#A5F3FC"/>'
+  }
+];
+function pictureSceneUrl(scene) {
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">' + scene.art + '</svg>'
+  );
+}
+function initPicturePuzzle(stage) {
+  let size = 3, sceneIndex = 0, cells = [], blank = 8, moves = 0, won = false;
+  let cellEls = [];
+  const chooser = el('div', 'pp-chooser');
+  const sceneBtns = el('div', 'pp-options');
+  const sizeBtns = el('div', 'pp-options');
+  const status = el('div', 'mem-status', '');
+  const grid = el('div', 'pp-grid');
+  const preview = el('div', 'pp-preview');
+  const msg = el('p', 'kd-msg', 'Tap a tile next to the empty space to slide it.');
+  const previewBtn = el('button', 'btn btn-ghost btn-sm', '👀 Show picture');
+  const newBtn = el('button', 'btn', '🔀 New puzzle');
+  const panel = el('div', 'kd-panel');
+  preview.setAttribute('role', 'img');
+  preview.style.display = 'none';
+  previewBtn.type = 'button';
+  newBtn.type = 'button';
+  panel.append(msg, preview, previewBtn, newBtn);
+  stage.append(chooser, status, grid, panel);
+
+  PICTURE_SCENES.forEach((scene, i) => {
+    const b = el('button', 'pp-option', scene.emoji + ' ' + scene.name);
+    b.type = 'button';
+    b.onclick = () => {
+      if (sceneIndex === i) return;
+      sceneIndex = i;
+      sndTap();
+      reset();
+    };
+    sceneBtns.append(b);
+  });
+  [[3, '3 × 3 Easy'], [4, '4 × 4 Challenge']].forEach(choice => {
+    const b = el('button', 'pp-option', choice[1]);
+    b.type = 'button';
+    b.onclick = () => {
+      if (size === choice[0]) return;
+      size = choice[0];
+      sndTap();
+      reset();
+    };
+    sizeBtns.append(b);
+  });
+  chooser.append(sceneBtns, sizeBtns);
+
+  function isSolved() {
+    return cells.every((v, i) => v === i);
+  }
+  function neighbors(pos) {
+    const row = Math.floor(pos / size), col = pos % size;
+    const result = [];
+    if (col > 0) result.push(pos - 1);
+    if (col < size - 1) result.push(pos + 1);
+    if (row > 0) result.push(pos - size);
+    if (row < size - 1) result.push(pos + size);
+    return result;
+  }
+  function swapWithBlank(pos) {
+    cells[blank] = cells[pos];
+    cells[pos] = size * size - 1;
+    blank = pos;
+  }
+  function shuffleBoard() {
+    let previous = -1;
+    const steps = size === 3 ? 70 : 160;
+    for (let i = 0; i < steps; i++) {
+      const options = neighbors(blank).filter(pos => pos !== previous);
+      const pos = options[Math.floor(Math.random() * options.length)];
+      previous = blank;
+      swapWithBlank(pos);
+    }
+    if (isSolved()) swapWithBlank(neighbors(blank)[0]);
+  }
+  function paintTile(button, value) {
+    const row = Math.floor(value / size), col = value % size;
+    const position = size === 1 ? 0 : col * 100 / (size - 1);
+    const positionY = size === 1 ? 0 : row * 100 / (size - 1);
+    button.style.backgroundImage = 'url("' + pictureSceneUrl(PICTURE_SCENES[sceneIndex]) + '")';
+    button.style.backgroundSize = (size * 100) + '% ' + (size * 100) + '%';
+    button.style.backgroundPosition = position + '% ' + positionY + '%';
+  }
+  function render() {
+    grid.classList.toggle('solved', won);
+    cellEls.forEach((button, pos) => {
+      const value = cells[pos];
+      const empty = value === size * size - 1 && !won;
+      button.className = 'pp-tile' + (empty ? ' pp-empty' : '') +
+        (!won && neighbors(blank).includes(pos) ? ' movable' : '');
+      button.disabled = empty || won;
+      button.setAttribute('aria-label', empty ? 'Empty space' : 'Picture piece ' + (value + 1));
+      if (empty) {
+        button.style.backgroundImage = 'none';
+      } else {
+        paintTile(button, value);
+      }
+    });
+    const best = state.picturePuzzle[size === 3 ? 'best3' : 'best4'];
+    status.textContent = 'Moves: ' + moves + ' · 🏆 Best: ' + (best || '—') +
+      ' · Puzzles solved: ' + state.picturePuzzle.plays;
+    Array.from(sceneBtns.children).forEach((b, i) => {
+      b.classList.toggle('selected', i === sceneIndex);
+      b.setAttribute('aria-pressed', i === sceneIndex ? 'true' : 'false');
+    });
+    Array.from(sizeBtns.children).forEach((b, i) => {
+      const selected = (i === 0 ? 3 : 4) === size;
+      b.classList.toggle('selected', selected);
+      b.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    });
+  }
+  function moveTile(pos) {
+    if (won || !neighbors(blank).includes(pos)) return;
+    swapWithBlank(pos);
+    moves++;
+    sndTap();
+    if (isSolved()) {
+      won = true;
+      state.picturePuzzle.plays++;
+      const key = size === 3 ? 'best3' : 'best4';
+      if (!state.picturePuzzle[key] || moves < state.picturePuzzle[key]) {
+        state.picturePuzzle[key] = moves;
+      }
+      save();
+      msg.textContent = '🎉 Picture complete in ' + moves + ' moves! Choose New puzzle to play again.';
+      confetti(30);
+      sndWin();
+    }
+    render();
+  }
+  function reset() {
+    cells = Array.from({ length: size * size }, (_, i) => i);
+    blank = cells.length - 1;
+    moves = 0;
+    won = false;
+    shuffleBoard();
+    grid.innerHTML = '';
+    grid.style.gridTemplateColumns = 'repeat(' + size + ', 1fr)';
+    grid.classList.remove('solved');
+    cellEls = cells.map((_, pos) => {
+      const b = el('button', 'pp-tile');
+      b.type = 'button';
+      b.onclick = () => moveTile(pos);
+      grid.append(b);
+      return b;
+    });
+    msg.textContent = 'Tap a tile next to the empty space to slide it.';
+    preview.style.backgroundImage = 'url("' + pictureSceneUrl(PICTURE_SCENES[sceneIndex]) + '")';
+    preview.setAttribute('aria-label', PICTURE_SCENES[sceneIndex].name + ' completed picture');
+    render();
+  }
+  previewBtn.onclick = () => {
+    const showing = preview.style.display !== 'none';
+    preview.style.display = showing ? 'none' : 'block';
+    previewBtn.textContent = showing ? '👀 Show picture' : '🙈 Hide picture';
+    sndTap();
+  };
+  newBtn.onclick = () => { sndTap(); reset(); };
+
+  reset();
 }
 
 /* ============================================================

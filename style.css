@@ -957,6 +957,91 @@ html, body {
 .c4-cell.p1 { background: #EF4444; }
 .c4-cell.p2 { background: #FBBF24; }
 
+/* ===== Picture Puzzle ===== */
+.pp-chooser {
+  display: grid;
+  gap: 8px;
+  max-width: 520px;
+  margin: 0 auto 14px;
+}
+.pp-options {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+.pp-option {
+  font-family: inherit;
+  border: 1px solid #CBD5E1;
+  border-radius: 12px;
+  background: #F8FAFC;
+  color: var(--ink);
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.pp-option.selected {
+  border-color: #6366F1;
+  background: #E0E7FF;
+  color: #3730A3;
+}
+.pp-grid {
+  display: grid;
+  gap: 5px;
+  max-width: 420px;
+  margin: 0 auto;
+  padding: 8px;
+  border-radius: 16px;
+  background: #312E81;
+  touch-action: manipulation;
+}
+.pp-tile {
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.pp-tile.movable:hover,
+.pp-tile.movable:focus-visible {
+  transform: scale(0.95);
+  outline: 3px solid #FBBF24;
+  outline-offset: -3px;
+}
+.pp-tile:disabled { opacity: 1; }
+.pp-tile.pp-empty {
+  background: #312E81;
+  box-shadow: inset 0 2px 8px rgba(15, 23, 42, 0.3);
+  cursor: default;
+}
+.pp-grid.solved {
+  gap: 0;
+  padding: 0;
+  background: transparent;
+}
+.pp-grid.solved .pp-tile {
+  border-radius: 0;
+  box-shadow: none;
+}
+.pp-grid.solved .pp-tile:first-child { border-top-left-radius: 12px; }
+.pp-grid.solved .pp-tile:last-child { border-bottom-right-radius: 12px; }
+.pp-preview {
+  width: 180px;
+  max-width: 65%;
+  aspect-ratio: 1;
+  margin: 12px auto;
+  border: 4px solid #E0E7FF;
+  border-radius: 16px;
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 3px 10px rgba(30, 41, 59, 0.12);
+}
+
 /* ===== Brick Blast ===== */
 #bk-canvas {
   width: 100%;
