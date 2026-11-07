@@ -3381,11 +3381,11 @@ function initPicturePuzzle(stage) {
   const grid = el('div', 'pp-grid');
   const preview = el('div', 'pp-preview');
   const msg = el('p', 'kd-msg', 'Tap a tile next to the empty space to slide it.');
-  const previewBtn = el('button', 'btn btn-ghost btn-sm', '👀 Show picture');
+  const previewBtn = el('button', 'btn btn-ghost btn-sm', '🙈 Hide picture');
   const newBtn = el('button', 'btn', '🔀 New puzzle');
   const panel = el('div', 'kd-panel');
   preview.setAttribute('role', 'img');
-  preview.style.display = 'none';
+  preview.style.display = 'block';
   previewBtn.type = 'button';
   newBtn.type = 'button';
   panel.append(msg, preview, previewBtn, newBtn);
@@ -3434,7 +3434,7 @@ function initPicturePuzzle(stage) {
   }
   function shuffleBoard() {
     let previous = -1;
-    const steps = size === 3 ? 70 : 160;
+    const steps = size === 3 ? 10 : 24;
     for (let i = 0; i < steps; i++) {
       const options = neighbors(blank).filter(pos => pos !== previous);
       const pos = options[Math.floor(Math.random() * options.length)];
