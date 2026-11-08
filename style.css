@@ -986,6 +986,13 @@ html, body {
   background: #E0E7FF;
   color: #3730A3;
 }
+.pp-guide { text-align: center; }
+.pp-guide-label {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 19px;
+  font-weight: 800;
+}
 .pp-grid {
   display: grid;
   gap: 5px;
@@ -996,6 +1003,7 @@ html, body {
   background: #312E81;
   touch-action: manipulation;
 }
+.pp-grid.pp-size-2 { max-width: 340px; }
 .pp-tile {
   aspect-ratio: 1;
   min-width: 0;
@@ -1007,12 +1015,12 @@ html, body {
   cursor: pointer;
   transition: transform 0.12s ease;
 }
-.pp-tile.movable:hover,
-.pp-tile.movable:focus-visible {
-  transform: scale(0.95);
-  outline: 3px solid #FBBF24;
-  outline-offset: -3px;
+.pp-tile.movable {
+  outline: 4px solid #FBBF24;
+  outline-offset: -5px;
 }
+.pp-tile.movable:hover,
+.pp-tile.movable:focus-visible { transform: scale(0.95); }
 .pp-tile:disabled { opacity: 1; }
 .pp-tile.pp-empty {
   background: #312E81;

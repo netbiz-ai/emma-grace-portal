@@ -84,7 +84,7 @@ function defaultState() {
     connect4: { wins: 0, plays: 0 }, // Four in a Row record vs the computer
     bricks: { best: 0 },             // Brick Blast best score
     sleuth: { wins: 0, streak: 0, bestStreak: 0 }, // Word Detective
-    picturePuzzle: { plays: 0, best3: 0, best4: 0 }, // Sliding picture puzzle records
+    picturePuzzle: { plays: 0, best2: 0, best3: 0, best4: 0 }, // Sliding picture puzzle records
     shelf: defaultShelf(),
     challenge: { date: '', done: false },
     breakActive: false,
@@ -3372,24 +3372,24 @@ function pictureSceneUrl(scene) {
   );
 }
 function initPicturePuzzle(stage) {
-  let size = 3, sceneIndex = 0, cells = [], blank = 8, moves = 0, won = false;
+  let size = 2, sceneIndex = 0, cells = [], blank = 3, moves = 0, won = false;
   let cellEls = [];
   const chooser = el('div', 'pp-chooser');
   const sceneBtns = el('div', 'pp-options');
   const sizeBtns = el('div', 'pp-options');
+  const guide = el('div', 'pp-guide');
+  const guideLabel = el('p', 'pp-guide-label', '🖼️ Make this picture!');
+  const preview = el('div', 'pp-preview');
   const status = el('div', 'mem-status', '');
   const grid = el('div', 'pp-grid');
-  const preview = el('div', 'pp-preview');
-  const msg = el('p', 'kd-msg', 'Tap a tile next to the empty space to slide it.');
-  const previewBtn = el('button', 'btn btn-ghost btn-sm', '🙈 Hide picture');
+  const msg = el('p', 'kd-msg', 'Tap a glowing tile next to the empty space.');
   const newBtn = el('button', 'btn', '🔀 New puzzle');
   const panel = el('div', 'kd-panel');
   preview.setAttribute('role', 'img');
-  preview.style.display = 'block';
-  previewBtn.type = 'button';
   newBtn.type = 'button';
-  panel.append(msg, preview, previewBtn, newBtn);
-  stage.append(chooser, status, grid, panel);
+  guide.append(guideLabel, preview);
+  panel.append(msg, newBtn);
+  stage.append(chooser, guide, status, grid, panel);
 
   PICTURE_SCENES.forEach((scene, i) => {
     const b = el('button', 'pp-option', scene.emoji + ' ' + scene.name);
@@ -3402,7 +3402,7 @@ function initPicturePuzzle(stage) {
     };
     sceneBtns.append(b);
   });
-  [[3, '3 × 3 Easy'], [4, '4 × 4 Challenge']].forEach(choice => {
+  [[2, '2 × 2 Starter'], [3, '3 × 3 Next Step']].forEach(choice => {
     const b = el('button', 'pp-option', choice[1]);
     b.type = 'button';
     b.onclick = () => {
@@ -3434,7 +3434,7 @@ function initPicturePuzzle(stage) {
   }
   function shuffleBoard() {
     let previous = -1;
-    const steps = size === 3 ? 10 : 24;
+    const steps = size === 2 ? 4 : 8;
     for (let i = 0; i < steps; i++) {
       const options = neighbors(blank).filter(pos => pos !== previous);
       const pos = options[Math.floor(Math.random() * options.length)];
@@ -3445,8 +3445,8 @@ function initPicturePuzzle(stage) {
   }
   function paintTile(button, value) {
     const row = Math.floor(value / size), col = value % size;
-    const position = size === 1 ? 0 : col * 100 / (size - 1);
-    const positionY = size === 1 ? 0 : row * 100 / (size - 1);
+    const position = col * 100 / (size - 1);
+    const positionY = row * 100 / (size - 1);
     button.style.backgroundImage = 'url("' + pictureSceneUrl(PICTURE_SCENES[sceneIndex]) + '")';
     button.style.backgroundSize = (size * 100) + '% ' + (size * 100) + '%';
     button.style.backgroundPosition = position + '% ' + positionY + '%';
@@ -3466,7 +3466,7 @@ function initPicturePuzzle(stage) {
         paintTile(button, value);
       }
     });
-    const best = state.picturePuzzle[size === 3 ? 'best3' : 'best4'];
+    const best = state.picturePuzzle['best' + size];
     status.textContent = 'Moves: ' + moves + ' · 🏆 Best: ' + (best || '—') +
       ' · Puzzles solved: ' + state.picturePuzzle.plays;
     Array.from(sceneBtns.children).forEach((b, i) => {
@@ -3474,7 +3474,7 @@ function initPicturePuzzle(stage) {
       b.setAttribute('aria-pressed', i === sceneIndex ? 'true' : 'false');
     });
     Array.from(sizeBtns.children).forEach((b, i) => {
-      const selected = (i === 0 ? 3 : 4) === size;
+      const selected = i + 2 === size;
       b.classList.toggle('selected', selected);
       b.setAttribute('aria-pressed', selected ? 'true' : 'false');
     });
@@ -3487,12 +3487,12 @@ function initPicturePuzzle(stage) {
     if (isSolved()) {
       won = true;
       state.picturePuzzle.plays++;
-      const key = size === 3 ? 'best3' : 'best4';
+      const key = 'best' + size;
       if (!state.picturePuzzle[key] || moves < state.picturePuzzle[key]) {
         state.picturePuzzle[key] = moves;
       }
       save();
-      msg.textContent = '🎉 Picture complete in ' + moves + ' moves! Choose New puzzle to play again.';
+      msg.textContent = '🎉 You made the picture in ' + moves + ' moves! Tap New puzzle to play again.';
       confetti(30);
       sndWin();
     }
@@ -3507,6 +3507,7 @@ function initPicturePuzzle(stage) {
     grid.innerHTML = '';
     grid.style.gridTemplateColumns = 'repeat(' + size + ', 1fr)';
     grid.classList.remove('solved');
+    grid.classList.toggle('pp-size-2', size === 2);
     cellEls = cells.map((_, pos) => {
       const b = el('button', 'pp-tile');
       b.type = 'button';
@@ -3514,17 +3515,11 @@ function initPicturePuzzle(stage) {
       grid.append(b);
       return b;
     });
-    msg.textContent = 'Tap a tile next to the empty space to slide it.';
+    msg.textContent = 'Tap a glowing tile next to the empty space.';
     preview.style.backgroundImage = 'url("' + pictureSceneUrl(PICTURE_SCENES[sceneIndex]) + '")';
     preview.setAttribute('aria-label', PICTURE_SCENES[sceneIndex].name + ' completed picture');
     render();
   }
-  previewBtn.onclick = () => {
-    const showing = preview.style.display !== 'none';
-    preview.style.display = showing ? 'none' : 'block';
-    previewBtn.textContent = showing ? '👀 Show picture' : '🙈 Hide picture';
-    sndTap();
-  };
   newBtn.onclick = () => { sndTap(); reset(); };
 
   reset();
