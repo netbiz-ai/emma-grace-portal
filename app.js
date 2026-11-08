@@ -85,6 +85,7 @@ function defaultState() {
     bricks: { best: 0 },             // Brick Blast best score
     sleuth: { wins: 0, streak: 0, bestStreak: 0 }, // Word Detective
     picturePuzzle: { plays: 0, best2: 0, best3: 0, best4: 0 }, // Sliding picture puzzle records
+    fruitSplash: { best: 0, plays: 0 }, // Fruit Splash best score and rounds played
     shelf: defaultShelf(),
     challenge: { date: '', done: false },
     breakActive: false,
@@ -103,7 +104,7 @@ function loadState() {
       state.settings = Object.assign(defaultState().settings, parsed.settings || {});
       // Merge nested game state too, so older saves pick up fields added later.
       ['garden', 'keydash', 'racer', 'dressup', 'builder', 'challenge',
-        'snake', 'twenty48', 'connect4', 'bricks', 'sleuth', 'picturePuzzle'].forEach(k => {
+        'snake', 'twenty48', 'connect4', 'bricks', 'sleuth', 'picturePuzzle', 'fruitSplash'].forEach(k => {
         state[k] = Object.assign(defaultState()[k], parsed[k] || {});
       });
       if (!Array.isArray(state.shelf) || !state.shelf.length) state.shelf = defaultShelf();
@@ -200,6 +201,7 @@ const GAMES = [
   { id: 'keydash', name: 'Keyboard Dash', emoji: '⌨️', cat: 'Arcade', desc: 'Jump the keys!', bg: 'linear-gradient(160deg,#FFE9F4,#FFF9FC)' },
   { id: 'snake', name: 'Super Snake', emoji: '🐍', cat: 'Arcade', desc: 'Eat & grow', bg: 'linear-gradient(160deg,#E3F6EE,#F4FFF9)' },
   { id: 'bricks', name: 'Brick Blast', emoji: '🏓', cat: 'Arcade', desc: 'Bounce & smash', bg: 'linear-gradient(160deg,#E8ECFF,#F6F7FF)' },
+  { id: 'fruit', name: 'Fruit Splash', emoji: '🍉', cat: 'Arcade', desc: 'Swipe & slice!', bg: 'linear-gradient(160deg,#FEF3C7,#FFF7ED)' },
   { id: '2048', name: '2048', emoji: '🧮', cat: 'Puzzle', desc: 'Merge to 2048', bg: 'linear-gradient(160deg,#FFF0E3,#FFFAF3)' },
   { id: 'connect4', name: 'Four in a Row', emoji: '🔴', cat: 'Puzzle', desc: 'Beat the computer', bg: 'linear-gradient(160deg,#E3E9FF,#F5F7FF)' },
   { id: 'picture', name: 'Picture Puzzle', emoji: '🧩', cat: 'Puzzle', desc: 'Slide the picture together', bg: 'linear-gradient(160deg,#EDE9FE,#FAF8FF)' },
@@ -211,7 +213,7 @@ const GAMES = [
   { id: 'numbers', name: 'Number Quest', emoji: '🔢', cat: 'Educational', desc: 'Math practice', bg: 'linear-gradient(160deg,#E7F9EF,#F6FFF9)' },
   { id: 'letters', name: 'Word Wonders', emoji: '🔤', cat: 'Educational', desc: 'Letters & words', bg: 'linear-gradient(160deg,#FFF3D9,#FFFBF2)' }
 ];
-const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', racer: 'Rainbow Racer', keydash: 'Keyboard Dash', snake: 'Super Snake', bricks: 'Brick Blast', '2048': '2048', connect4: 'Four in a Row', picture: 'Picture Puzzle', sleuth: 'Word Detective', dressup: 'Dress Up Studio', builder: 'Block Builder', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
+const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', racer: 'Rainbow Racer', keydash: 'Keyboard Dash', snake: 'Super Snake', bricks: 'Brick Blast', fruit: 'Fruit Splash', '2048': '2048', connect4: 'Four in a Row', picture: 'Picture Puzzle', sleuth: 'Word Detective', dressup: 'Dress Up Studio', builder: 'Block Builder', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
 const CATS = [
   { name: 'Pets', emoji: '🐾' },
   { name: 'Garden', emoji: '🌻' },
@@ -518,6 +520,7 @@ function startGame(id) {
   else if (id === 'keydash') initKeydash(stage);
   else if (id === 'snake') initSnake(stage);
   else if (id === 'bricks') initBricks(stage);
+  else if (id === 'fruit') initFruitSplash(stage);
   else if (id === '2048') init2048Game(stage);
   else if (id === 'connect4') initConnect4(stage);
   else if (id === 'picture') initPicturePuzzle(stage);
@@ -3523,6 +3526,354 @@ function initPicturePuzzle(stage) {
   newBtn.onclick = () => { sndTap(); reset(); };
 
   reset();
+}
+
+/* ============================================================
+   GAME 17: Fruit Splash
+   A gentle fruit-only swiping game with no bombs or lives.
+   Crisp vector graphics, sliced fruit, and juice particles are
+   drawn locally on a high-DPI canvas for sharp iPad visuals.
+   ============================================================ */
+const FS_W = 800;
+const FS_H = 560;
+const FS_ROUND = 45;
+const FS_TYPES = [
+  { skin: '#EF4444', light: '#FECACA', flesh: '#FFF1F2', juice: '#FB7185', leaf: true },
+  { skin: '#F97316', light: '#FED7AA', flesh: '#FFEDD5', juice: '#FDBA74' },
+  { skin: '#22C55E', light: '#BBF7D0', flesh: '#F87171', juice: '#FB7185', stripes: true },
+  { skin: '#FACC15', light: '#FEF08A', flesh: '#FEFCE8', juice: '#FDE047' },
+  { skin: '#A855F7', light: '#E9D5FF', flesh: '#F5D0FE', juice: '#D8B4FE' }
+];
+function fsSegmentHit(x1, y1, x2, y2, cx, cy, radius) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const length2 = dx * dx + dy * dy;
+  const t = length2 ? Math.max(0, Math.min(1, ((cx - x1) * dx + (cy - y1) * dy) / length2)) : 0;
+  const px = x1 + t * dx, py = y1 + t * dy;
+  return (cx - px) * (cx - px) + (cy - py) * (cy - py) <= radius * radius;
+}
+function fsDrawFruit(ctx, f) {
+  const type = FS_TYPES[f.type];
+  const r = f.r;
+  const grad = ctx.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.08, 0, 0, r);
+  grad.addColorStop(0, type.light);
+  grad.addColorStop(0.55, type.skin);
+  grad.addColorStop(1, '#7C2D12');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fill();
+  if (type.stripes) {
+    ctx.strokeStyle = '#15803D';
+    ctx.lineWidth = Math.max(4, r * 0.1);
+    for (const x of [-0.55, 0, 0.55]) {
+      ctx.beginPath();
+      ctx.moveTo(x * r, -r * 0.85);
+      ctx.quadraticCurveTo(x * r * 1.5, 0, x * r, r * 0.85);
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.32, -r * 0.35, r * 0.16, r * 0.28, -0.6, 0, Math.PI * 2);
+  ctx.fill();
+  if (type.leaf) {
+    ctx.fillStyle = '#166534';
+    ctx.beginPath();
+    ctx.ellipse(r * 0.12, -r * 0.92, r * 0.3, r * 0.13, -0.45, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+function initFruitSplash(stage) {
+  const canvas = el('canvas');
+  canvas.id = 'fs-canvas';
+  const dpr = Math.min(3, Math.max(1, window.devicePixelRatio || 1));
+  canvas.width = Math.round(FS_W * dpr);
+  canvas.height = Math.round(FS_H * dpr);
+  canvas.setAttribute('aria-label', 'Fruit Splash. Swipe through the flying fruit to slice it.');
+  const panel = el('div', 'kd-panel');
+  stage.append(canvas, panel);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  let fruits = [], halves = [], particles = [], trail = [], popups = [];
+  let score = 0, remaining = FS_ROUND, spawnIn = 0, mode = 'intro', lastT = 0;
+  let swiping = false, lastPoint = null, swipeHits = 0;
+
+  function reset() {
+    fruits = [];
+    halves = [];
+    particles = [];
+    trail = [];
+    popups = [];
+    score = 0;
+    remaining = FS_ROUND;
+    spawnIn = 0.2;
+    lastT = 0;
+    swiping = false;
+    lastPoint = null;
+    swipeHits = 0;
+  }
+  function startPlay() {
+    reset();
+    mode = 'play';
+    panel.style.display = 'none';
+  }
+  function showIntro() {
+    mode = 'intro';
+    panel.style.display = '';
+    panel.innerHTML = '';
+    panel.append(el('p', 'kd-msg',
+      'Swipe through the flying fruit! Slice 3 in one swipe for a combo.<br>45 seconds · no bombs · just fruity fun!'));
+    if (state.fruitSplash.best) panel.append(el('p', 'kd-hint', '🏆 Best score: ' + state.fruitSplash.best));
+    const start = el('button', 'btn', '🍉 Start splashing');
+    start.type = 'button';
+    start.onclick = () => { sndTap(); startPlay(); };
+    panel.append(start);
+  }
+  function endGame() {
+    if (mode !== 'play') return;
+    mode = 'over';
+    swiping = false;
+    state.fruitSplash.plays++;
+    if (score > state.fruitSplash.best) state.fruitSplash.best = score;
+    save();
+    sndWin();
+    confetti(24);
+    panel.style.display = '';
+    panel.innerHTML = '';
+    panel.append(el('p', 'kd-msg',
+      '🎉 Great splashing! Score: <b>' + score + '</b> · Best: <b>' + state.fruitSplash.best + '</b>'));
+    const again = el('button', 'btn', '🍊 Play again');
+    again.type = 'button';
+    again.onclick = () => { sndTap(); startPlay(); };
+    panel.append(again);
+  }
+  function spawnWave() {
+    const progress = (FS_ROUND - remaining) / FS_ROUND;
+    const count = progress > 0.45 && Math.random() < 0.35 ? 3 : (Math.random() < 0.65 ? 2 : 1);
+    for (let i = 0; i < count; i++) {
+      const r = 43 + Math.random() * 10;
+      const x = 90 + Math.random() * (FS_W - 180);
+      fruits.push({
+        x, y: FS_H + r + Math.random() * 35, r,
+        vx: (FS_W / 2 - x) * 0.28 + (Math.random() - 0.5) * 90,
+        vy: -(960 + Math.random() * 130),
+        type: Math.floor(Math.random() * FS_TYPES.length),
+        rot: Math.random() * Math.PI * 2,
+        vr: (Math.random() - 0.5) * 2
+      });
+    }
+  }
+  function sliceFruit(f) {
+    const type = FS_TYPES[f.type];
+    score++;
+    swipeHits++;
+    for (const side of [-1, 1]) {
+      halves.push({
+        x: f.x, y: f.y, r: f.r, type: f.type, side,
+        vx: f.vx + side * 125, vy: f.vy * 0.35 - 70,
+        rot: f.rot, vr: side * 4
+      });
+    }
+    for (let i = 0; i < 14; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 70 + Math.random() * 220;
+      particles.push({
+        x: f.x, y: f.y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        r: 3 + Math.random() * 6, color: type.juice, life: 0.65 + Math.random() * 0.35
+      });
+    }
+    popups.push({ x: f.x, y: f.y - f.r, text: '+1', life: 0.8 });
+    beep(520 + swipeHits * 70, 0.07, 'sine', 0.08);
+    if (swipeHits >= 3 && swipeHits - 1 < 3) {
+      score += 3;
+      popups.push({ x: f.x, y: f.y - f.r - 35, text: 'COMBO +3!', life: 1.2 });
+      sndGood();
+    }
+  }
+  function update(dt, now) {
+    spawnIn -= dt;
+    if (spawnIn <= 0) {
+      spawnWave();
+      const progress = (FS_ROUND - remaining) / FS_ROUND;
+      spawnIn = Math.max(0.48, 0.85 - progress * 0.3);
+    }
+    for (const f of fruits) {
+      f.vy += 1000 * dt;
+      f.x += f.vx * dt;
+      f.y += f.vy * dt;
+      f.rot += f.vr * dt;
+    }
+    fruits = fruits.filter(f => f.y - f.r < FS_H + 100);
+    for (const h of halves) {
+      h.vy += 900 * dt;
+      h.x += h.vx * dt;
+      h.y += h.vy * dt;
+      h.rot += h.vr * dt;
+    }
+    halves = halves.filter(h => h.y - h.r < FS_H + 100);
+    for (const p of particles) {
+      p.vy += 500 * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt;
+    }
+    particles = particles.filter(p => p.life > 0);
+    for (const p of popups) { p.y -= 45 * dt; p.life -= dt; }
+    popups = popups.filter(p => p.life > 0);
+    trail = trail.filter(p => now - p.t < 180);
+  }
+  function drawBackground(now) {
+    const sky = ctx.createLinearGradient(0, 0, 0, FS_H);
+    sky.addColorStop(0, '#7DD3FC');
+    sky.addColorStop(0.62, '#E0F2FE');
+    sky.addColorStop(1, '#FEF3C7');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, FS_W, FS_H);
+    const sun = ctx.createRadialGradient(665, 90, 8, 665, 90, 85);
+    sun.addColorStop(0, 'rgba(255,255,255,0.95)');
+    sun.addColorStop(0.35, 'rgba(254,240,138,0.8)');
+    sun.addColorStop(1, 'rgba(254,240,138,0)');
+    ctx.fillStyle = sun;
+    ctx.fillRect(575, 0, 180, 180);
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    for (const cloud of [[130, 95, 1], [480, 155, 0.75]]) {
+      const drift = Math.sin(now / 5000 + cloud[0]) * 12;
+      ctx.beginPath();
+      ctx.arc(cloud[0] + drift, cloud[1], 30 * cloud[2], 0, Math.PI * 2);
+      ctx.arc(cloud[0] + 35 * cloud[2] + drift, cloud[1] - 12, 40 * cloud[2], 0, Math.PI * 2);
+      ctx.arc(cloud[0] + 75 * cloud[2] + drift, cloud[1], 28 * cloud[2], 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#86EFAC';
+    ctx.beginPath();
+    ctx.moveTo(0, 420);
+    ctx.quadraticCurveTo(170, 320, 360, 435);
+    ctx.quadraticCurveTo(590, 310, 800, 420);
+    ctx.lineTo(800, FS_H);
+    ctx.lineTo(0, FS_H);
+    ctx.fill();
+    ctx.fillStyle = '#4ADE80';
+    ctx.beginPath();
+    ctx.moveTo(0, 475);
+    ctx.quadraticCurveTo(220, 390, 420, 480);
+    ctx.quadraticCurveTo(620, 400, 800, 465);
+    ctx.lineTo(800, FS_H);
+    ctx.lineTo(0, FS_H);
+    ctx.fill();
+  }
+  function draw(now) {
+    drawBackground(now);
+    for (const f of fruits) {
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      ctx.rotate(f.rot);
+      fsDrawFruit(ctx, f);
+      ctx.restore();
+    }
+    for (const h of halves) {
+      ctx.save();
+      ctx.translate(h.x, h.y);
+      ctx.rotate(h.rot);
+      ctx.beginPath();
+      ctx.rect(h.side < 0 ? -h.r : 0, -h.r, h.r, h.r * 2);
+      ctx.clip();
+      fsDrawFruit(ctx, h);
+      ctx.restore();
+    }
+    for (const p of particles) {
+      ctx.globalAlpha = Math.min(1, p.life * 1.6);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (trail.length > 1) {
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.shadowColor = '#38BDF8';
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 12;
+      ctx.beginPath();
+      ctx.moveTo(trail[0].x, trail[0].y);
+      for (let i = 1; i < trail.length; i++) ctx.lineTo(trail[i].x, trail[i].y);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+    for (const p of popups) {
+      ctx.globalAlpha = Math.min(1, p.life * 1.5);
+      ctx.fillStyle = '#7C2D12';
+      ctx.font = '800 28px Nunito, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(p.text, p.x, p.y);
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.fillRect(16, 14, 205, 52);
+    ctx.fillRect(FS_W - 190, 14, 174, 52);
+    ctx.fillStyle = '#1E293B';
+    ctx.font = '800 25px Nunito, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText('🍉 ' + score, 30, 41);
+    ctx.textAlign = 'right';
+    ctx.fillText('⏱️ ' + Math.max(0, Math.ceil(remaining)) + 's', FS_W - 30, 41);
+  }
+  function point(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * FS_W / rect.width,
+      y: (e.clientY - rect.top) * FS_H / rect.height,
+      t: performance.now()
+    };
+  }
+  function finishSwipe() { swiping = false; lastPoint = null; swipeHits = 0; }
+  canvas.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (mode !== 'play' || state.breakActive || isLocked()) return;
+    swiping = true;
+    swipeHits = 0;
+    lastPoint = point(e);
+    trail = [lastPoint];
+    if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (!swiping || mode !== 'play' || state.breakActive || isLocked()) return;
+    e.preventDefault();
+    const next = point(e);
+    trail.push(next);
+    if (trail.length > 16) trail.shift();
+    const hit = [];
+    for (const f of fruits) {
+      if (fsSegmentHit(lastPoint.x, lastPoint.y, next.x, next.y, f.x, f.y, f.r + 12)) hit.push(f);
+    }
+    if (hit.length) {
+      fruits = fruits.filter(f => !hit.includes(f));
+      hit.forEach(sliceFruit);
+    }
+    lastPoint = next;
+  });
+  canvas.addEventListener('pointerup', finishSwipe);
+  canvas.addEventListener('pointercancel', finishSwipe);
+  canvas.addEventListener('pointerleave', finishSwipe);
+
+  function tick(t) {
+    if (mode === 'play' && !state.breakActive && !isLocked()) {
+      const dt = Math.min(0.033, lastT ? (t - lastT) / 1000 : 0.016);
+      remaining -= dt;
+      if (remaining <= 0) endGame();
+      else update(dt, t);
+    }
+    lastT = t;
+    draw(t);
+    gameRaf = requestAnimationFrame(tick);
+  }
+
+  showIntro();
+  draw(0);
+  gameRaf = requestAnimationFrame(tick);
 }
 
 /* ============================================================

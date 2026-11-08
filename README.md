@@ -8,13 +8,14 @@ It is a plain HTML/CSS/JS web app with no build step, no frameworks, and no trac
 ## What is inside
 
 - **Home screen** with big, colorful, touch-friendly cards organized by category.
-- **16 built-in mini-games** that work fully offline:
+- **17 built-in mini-games** that work fully offline:
   - Pet Pals (hatch eggs, feed/play/wash/rest your pets to earn hearts and adopt more; pets grow from Newborn to Full Grown across 5 rarity tiers)
   - Magic Garden (plant seeds, water them, and harvest for coins; crops grow in real time even while away, with rotating seed stock, weather, and rare Gold/Rainbow/Shocked mutations worth up to 100x)
   - Rainbow Racer (3-lane kart racer: tap left/right to dodge traffic, grab stars, catch turbo bolts; 3 hearts per run, best distance saved)
   - Keyboard Dash (tap to jump across giant candy keyboard keys; every key landed is +1 speed, one fall sends you back to the start; reach ENTER to escape each stage)
   - Super Snake (the classic: swipe or use the arrow pad, eat apples to grow, speed rises with score, best score saved)
   - Brick Blast (paddle-and-ball brick breaker: drag the paddle, tap to launch, clear levels that add rows and speed; 3 lives, best score saved)
+  - Fruit Splash (45 seconds of fruit-only swiping inspired by age-7 arcade games; high-DPI vector graphics, animated slices, juice particles, combo bonuses, and saved best scores; no bombs or lives)
   - 2048 (slide and merge tiles to reach 2048; best score and biggest tile saved)
   - Four in a Row (Connect Four against a friendly computer AI that wins when it can and blocks when it must)
   - Picture Puzzle (rebuild unicorn, space, and ocean pictures in age-6-friendly 2x2 Starter or 3x3 Next Step puzzles; short shuffles are always solvable, the reference picture stays visible, movable tiles glow, and best move counts are saved)
