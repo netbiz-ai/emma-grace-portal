@@ -1050,6 +1050,85 @@ html, body {
   box-shadow: 0 3px 10px rgba(30, 41, 59, 0.12);
 }
 
+/* ===== Block World ===== */
+#bw-canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 2px solid #93C5FD;
+  border-radius: 16px;
+  background: #60A5FA;
+  box-shadow: 0 8px 24px rgba(30, 64, 175, 0.16);
+  touch-action: none;
+  cursor: pointer;
+}
+.bw-tools {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 12px 0 10px;
+}
+.bw-tool,
+.bw-block,
+.bw-move,
+.bw-jump {
+  font-family: inherit;
+  border: 2px solid #CBD5E1;
+  background: #fff;
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+.bw-tool {
+  min-width: 130px;
+  padding: 11px 20px;
+  border-radius: 12px;
+  font-size: 17px;
+}
+.bw-tool.selected,
+.bw-block.selected {
+  border-color: #6366F1;
+  background: #E0E7FF;
+  color: #3730A3;
+}
+.bw-palette {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 12px;
+}
+.bw-block {
+  min-width: 0;
+  min-height: 66px;
+  padding: 7px 3px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.bw-block:disabled { opacity: 0.45; }
+.bw-controls {
+  display: grid;
+  grid-template-columns: 84px 150px 84px;
+  justify-content: center;
+  gap: 12px;
+  margin: 8px auto;
+}
+.bw-move,
+.bw-jump {
+  min-height: 64px;
+  border-radius: 16px;
+  font-size: 24px;
+  box-shadow: 0 4px 0 #CBD5E1;
+}
+.bw-jump { font-size: 18px; background: #EEF2FF; }
+.bw-move:active,
+.bw-jump:active { transform: translateY(3px); box-shadow: 0 1px 0 #CBD5E1; }
+@media (max-width: 600px) {
+  .bw-palette { grid-template-columns: repeat(3, 1fr); }
+}
+
 /* ===== Fruit Splash ===== */
 #fs-canvas {
   display: block;

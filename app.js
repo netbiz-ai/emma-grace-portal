@@ -86,6 +86,7 @@ function defaultState() {
     sleuth: { wins: 0, streak: 0, bestStreak: 0 }, // Word Detective
     picturePuzzle: { plays: 0, best2: 0, best3: 0, best4: 0 }, // Sliding picture puzzle records
     fruitSplash: { best: 0, plays: 0 }, // Fruit Splash best score and rounds played
+    blockWorld: { grid: [], inventory: {}, x: 0, y: 0, seed: 0 }, // Persistent mine-and-build world
     shelf: defaultShelf(),
     challenge: { date: '', done: false },
     breakActive: false,
@@ -104,7 +105,7 @@ function loadState() {
       state.settings = Object.assign(defaultState().settings, parsed.settings || {});
       // Merge nested game state too, so older saves pick up fields added later.
       ['garden', 'keydash', 'racer', 'dressup', 'builder', 'challenge',
-        'snake', 'twenty48', 'connect4', 'bricks', 'sleuth', 'picturePuzzle', 'fruitSplash'].forEach(k => {
+        'snake', 'twenty48', 'connect4', 'bricks', 'sleuth', 'picturePuzzle', 'fruitSplash', 'blockWorld'].forEach(k => {
         state[k] = Object.assign(defaultState()[k], parsed[k] || {});
       });
       if (!Array.isArray(state.shelf) || !state.shelf.length) state.shelf = defaultShelf();
@@ -208,12 +209,13 @@ const GAMES = [
   { id: 'sleuth', name: 'Word Detective', emoji: '🔎', cat: 'Educational', desc: 'Crack the word', bg: 'linear-gradient(160deg,#E7F3FF,#F5FAFF)' },
   { id: 'dressup', name: 'Dress Up Studio', emoji: '👗', cat: 'Creative', desc: 'Fashion show', bg: 'linear-gradient(160deg,#FFE0EE,#FFF5FA)' },
   { id: 'builder', name: 'Block Builder', emoji: '🧱', cat: 'Creative', desc: 'Build anything', bg: 'linear-gradient(160deg,#E8F1FF,#F6FAFF)' },
+  { id: 'blockworld', name: 'Block World', emoji: '⛏️', cat: 'Creative', desc: 'Mine, build & explore', bg: 'linear-gradient(160deg,#DCFCE7,#F0FDF4)' },
   { id: 'draw', name: 'Drawing Pad', emoji: '🎨', cat: 'Creative', desc: 'Paint a picture', bg: 'linear-gradient(160deg,#FFE3F0,#FFF6FB)' },
   { id: 'memory', name: 'Memory Match', emoji: '🧠', cat: 'Puzzle', desc: 'Find the pairs', bg: 'linear-gradient(160deg,#E3F2FF,#F5FBFF)' },
   { id: 'numbers', name: 'Number Quest', emoji: '🔢', cat: 'Educational', desc: 'Math practice', bg: 'linear-gradient(160deg,#E7F9EF,#F6FFF9)' },
   { id: 'letters', name: 'Word Wonders', emoji: '🔤', cat: 'Educational', desc: 'Letters & words', bg: 'linear-gradient(160deg,#FFF3D9,#FFFBF2)' }
 ];
-const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', racer: 'Rainbow Racer', keydash: 'Keyboard Dash', snake: 'Super Snake', bricks: 'Brick Blast', fruit: 'Fruit Splash', '2048': '2048', connect4: 'Four in a Row', picture: 'Picture Puzzle', sleuth: 'Word Detective', dressup: 'Dress Up Studio', builder: 'Block Builder', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
+const TITLES = { pets: 'Pet Pals', garden: 'Magic Garden', racer: 'Rainbow Racer', keydash: 'Keyboard Dash', snake: 'Super Snake', bricks: 'Brick Blast', fruit: 'Fruit Splash', '2048': '2048', connect4: 'Four in a Row', picture: 'Picture Puzzle', sleuth: 'Word Detective', dressup: 'Dress Up Studio', builder: 'Block Builder', blockworld: 'Block World', draw: 'Drawing Pad', memory: 'Memory Match', numbers: 'Number Quest', letters: 'Word Wonders', challenge: 'Daily Challenge' };
 const CATS = [
   { name: 'Pets', emoji: '🐾' },
   { name: 'Garden', emoji: '🌻' },
@@ -527,6 +529,7 @@ function startGame(id) {
   else if (id === 'sleuth') initSleuth(stage);
   else if (id === 'dressup') initDressup(stage);
   else if (id === 'builder') initBuilder(stage);
+  else if (id === 'blockworld') initBlockWorld(stage);
   else if (id === 'draw') initDraw(stage);
   else if (id === 'memory') initMemory(stage);
   else if (id === 'numbers') initNumbers(stage);
@@ -3874,6 +3877,385 @@ function initFruitSplash(stage) {
   showIntro();
   draw(0);
   gameRaf = requestAnimationFrame(tick);
+}
+
+/* ============================================================
+   GAME 18: Block World
+   An original, peaceful mine-and-build sandbox. Explore a saved
+   2D world, collect blocks, and build without monsters or hunger.
+   ============================================================ */
+const BW_COLS = 64;
+const BW_ROWS = 20;
+const BW_TILE = 48;
+const BW_W = 960;
+const BW_H = 540;
+const BW_BLOCKS = [
+  null,
+  { name: 'Grass', emoji: '🌱', color: '#65A30D' },
+  { name: 'Dirt', emoji: '🟫', color: '#92400E' },
+  { name: 'Stone', emoji: '🪨', color: '#78716C' },
+  { name: 'Wood', emoji: '🪵', color: '#A16207' },
+  { name: 'Leaves', emoji: '🍃', color: '#16A34A' },
+  { name: 'Crystal', emoji: '💎', color: '#8B5CF6' }
+];
+function bwGenerate(seed) {
+  const rand = mulberry32(seed);
+  const grid = new Array(BW_COLS * BW_ROWS).fill(0);
+  const heights = [];
+  for (let x = 0; x < BW_COLS; x++) {
+    const top = 8 + Math.floor(rand() * 3);
+    heights.push(top);
+    for (let y = top; y < BW_ROWS; y++) {
+      let block = y === top ? 1 : (y < top + 4 ? 2 : 3);
+      if (block === 3 && rand() < 0.045) block = 6;
+      grid[y * BW_COLS + x] = block;
+    }
+  }
+  for (let x = 5; x < BW_COLS - 4; x++) {
+    if (rand() > 0.16) continue;
+    const top = heights[x];
+    grid[(top - 1) * BW_COLS + x] = 4;
+    grid[(top - 2) * BW_COLS + x] = 4;
+    for (let dy = -4; dy <= -2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        if (Math.abs(dx) + Math.abs(dy + 3) > 3) continue;
+        const idx = (top + dy) * BW_COLS + x + dx;
+        if (top + dy >= 0 && !grid[idx]) grid[idx] = 5;
+      }
+    }
+  }
+  return grid;
+}
+function bwSolid(grid, x, y) {
+  if (x < 0 || x >= BW_COLS || y >= BW_ROWS) return true;
+  return y >= 0 && grid[y * BW_COLS + x] > 0;
+}
+function bwDrawBlock(ctx, id, x, y, size, tx, ty) {
+  const block = BW_BLOCKS[id];
+  ctx.fillStyle = block.color;
+  ctx.fillRect(x, y, size, size);
+  if (id === 1) {
+    ctx.fillStyle = '#92400E';
+    ctx.fillRect(x, y + size * 0.35, size, size * 0.65);
+    ctx.fillStyle = '#84CC16';
+    ctx.fillRect(x, y, size, size * 0.35);
+    ctx.fillStyle = '#4D7C0F';
+    for (let i = 0; i < 4; i++) ctx.fillRect(x + i * size / 4, y + size * 0.28, size / 8, size * 0.18);
+  } else if (id === 2) {
+    ctx.fillStyle = '#78350F';
+    for (let i = 0; i < 4; i++) {
+      const px = (i * 19 + tx * 7 + ty * 3) % 38;
+      const py = (i * 13 + ty * 11) % 38;
+      ctx.fillRect(x + px, y + py, 6, 5);
+    }
+  } else if (id === 3) {
+    ctx.fillStyle = '#A8A29E';
+    ctx.fillRect(x + 5, y + 6, 17, 10);
+    ctx.fillRect(x + 27, y + 27, 15, 9);
+    ctx.fillStyle = '#57534E';
+    ctx.fillRect(x + 27, y + 8, 9, 8);
+    ctx.fillRect(x + 8, y + 30, 12, 7);
+  } else if (id === 4) {
+    ctx.fillStyle = '#713F12';
+    ctx.fillRect(x + 8, y, 6, size);
+    ctx.fillRect(x + 32, y, 5, size);
+    ctx.fillStyle = '#CA8A04';
+    ctx.fillRect(x + 18, y, 8, size);
+  } else if (id === 5) {
+    ctx.fillStyle = '#22C55E';
+    ctx.fillRect(x + 4, y + 4, 18, 16);
+    ctx.fillRect(x + 25, y + 22, 18, 18);
+    ctx.fillStyle = '#15803D';
+    ctx.fillRect(x + 26, y + 5, 13, 12);
+    ctx.fillRect(x + 7, y + 27, 12, 12);
+  } else if (id === 6) {
+    ctx.fillStyle = '#C4B5FD';
+    ctx.beginPath();
+    ctx.moveTo(x + size / 2, y + 5);
+    ctx.lineTo(x + size - 7, y + size / 2);
+    ctx.lineTo(x + size / 2, y + size - 5);
+    ctx.lineTo(x + 7, y + size / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#EDE9FE';
+    ctx.fillRect(x + 19, y + 12, 8, 17);
+  }
+  ctx.strokeStyle = 'rgba(15,23,42,0.18)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
+}
+function initBlockWorld(stage) {
+  const canvas = el('canvas');
+  canvas.id = 'bw-canvas';
+  const dpr = Math.min(3, Math.max(1, window.devicePixelRatio || 1));
+  canvas.width = Math.round(BW_W * dpr);
+  canvas.height = Math.round(BW_H * dpr);
+  canvas.setAttribute('aria-label', 'Block World. Move, jump, mine blocks, and build.');
+  const status = el('div', 'mem-status', '');
+  const tools = el('div', 'bw-tools');
+  const mineBtn = el('button', 'bw-tool', '⛏️ Mine');
+  const buildBtn = el('button', 'bw-tool', '🧱 Build');
+  const palette = el('div', 'bw-palette');
+  const controls = el('div', 'bw-controls');
+  const leftBtn = el('button', 'bw-move', '◀');
+  const jumpBtn = el('button', 'bw-jump', '⬆️ Jump');
+  const rightBtn = el('button', 'bw-move', '▶');
+  const msg = el('p', 'kd-msg', 'Hold ◀ or ▶ to explore. Tap nearby blocks to mine or build.');
+  stage.append(canvas, status, tools, palette, controls, msg);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  tools.append(mineBtn, buildBtn);
+  controls.append(leftBtn, jumpBtn, rightBtn);
+
+  const saved = state.blockWorld;
+  const hasWorld = Array.isArray(saved.grid) && saved.grid.length === BW_COLS * BW_ROWS;
+  if (!saved.seed) saved.seed = Math.floor(Math.random() * 1000000000) + 1;
+  const grid = hasWorld ? saved.grid.slice() : bwGenerate(saved.seed);
+  const inventory = Object.assign({ 1: 4, 2: 8, 3: 6, 4: 4, 5: 4, 6: 0 }, saved.inventory || {});
+  const player = {
+    x: hasWorld ? saved.x : BW_TILE * 3, y: hasWorld ? saved.y : 0,
+    w: 26, h: 44, vx: 0, vy: 0, onGround: false
+  };
+  let mode = 'mine', selected = 2, lastT = 0, camX = 0, camY = 0;
+  let jumpQueued = false, targetCell = null;
+  const held = { left: false, right: false };
+
+  function saveWorld() {
+    state.blockWorld.grid = grid;
+    state.blockWorld.inventory = inventory;
+    state.blockWorld.x = player.x;
+    state.blockWorld.y = player.y;
+    save();
+  }
+  function renderControls() {
+    mineBtn.classList.toggle('selected', mode === 'mine');
+    buildBtn.classList.toggle('selected', mode === 'build');
+    mineBtn.setAttribute('aria-pressed', mode === 'mine' ? 'true' : 'false');
+    buildBtn.setAttribute('aria-pressed', mode === 'build' ? 'true' : 'false');
+    status.textContent = (mode === 'mine' ? '⛏️ Mine mode' : '🧱 Build with ' + BW_BLOCKS[selected].name) +
+      ' · World saved on this device';
+    Array.from(palette.children).forEach((b, i) => {
+      const id = i + 1;
+      b.classList.toggle('selected', id === selected);
+      b.setAttribute('aria-pressed', id === selected ? 'true' : 'false');
+      b.innerHTML = BW_BLOCKS[id].emoji + ' ' + BW_BLOCKS[id].name + '<br><b>' + (inventory[id] || 0) + '</b>';
+      b.disabled = mode === 'build' && !inventory[id];
+    });
+  }
+  mineBtn.type = 'button';
+  buildBtn.type = 'button';
+  mineBtn.onclick = () => { mode = 'mine'; sndTap(); renderControls(); };
+  buildBtn.onclick = () => { mode = 'build'; sndTap(); renderControls(); };
+  BW_BLOCKS.forEach((block, id) => {
+    if (!block) return;
+    const b = el('button', 'bw-block');
+    b.type = 'button';
+    b.setAttribute('aria-label', 'Select ' + block.name);
+    b.onclick = () => {
+      if (!inventory[id]) { msg.textContent = 'Mine some ' + block.name.toLowerCase() + ' first!'; sndNo(); return; }
+      selected = id;
+      mode = 'build';
+      sndTap();
+      renderControls();
+    };
+    palette.append(b);
+  });
+  function bindHold(button, key, label) {
+    button.type = 'button';
+    button.setAttribute('aria-label', label);
+    const release = () => { held[key] = false; };
+    button.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      if (!state.breakActive && !isLocked()) held[key] = true;
+      if (button.setPointerCapture) button.setPointerCapture(e.pointerId);
+    });
+    button.addEventListener('pointerup', release);
+    button.addEventListener('pointercancel', release);
+    button.addEventListener('pointerleave', release);
+  }
+  bindHold(leftBtn, 'left', 'Move left');
+  bindHold(rightBtn, 'right', 'Move right');
+  jumpBtn.type = 'button';
+  jumpBtn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (!state.breakActive && !isLocked()) jumpQueued = true;
+  });
+
+  function collides(x, y) {
+    const left = Math.floor(x / BW_TILE), right = Math.floor((x + player.w - 1) / BW_TILE);
+    const top = Math.floor(y / BW_TILE), bottom = Math.floor((y + player.h - 1) / BW_TILE);
+    for (let ty = top; ty <= bottom; ty++) {
+      for (let tx = left; tx <= right; tx++) if (bwSolid(grid, tx, ty)) return true;
+    }
+    return false;
+  }
+  function movePlayer(dx, dy) {
+    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 8));
+    for (let i = 0; i < steps; i++) {
+      if (dx) {
+        const step = dx / (steps - i);
+        if (!collides(player.x + step, player.y)) player.x += step;
+        else player.vx = 0;
+        dx -= step;
+      }
+      if (dy) {
+        const step = dy / (steps - i);
+        if (!collides(player.x, player.y + step)) player.y += step;
+        else {
+          if (step > 0) player.onGround = true;
+          player.vy = 0;
+          dy = 0;
+        }
+      }
+    }
+  }
+  function update(dt) {
+    player.vx = (held.right ? 210 : 0) - (held.left ? 210 : 0);
+    if (jumpQueued && player.onGround) {
+      player.vy = -510;
+      player.onGround = false;
+      sndTap();
+    }
+    jumpQueued = false;
+    player.vy = Math.min(750, player.vy + 1200 * dt);
+    movePlayer(player.vx * dt, 0);
+    player.onGround = false;
+    movePlayer(0, player.vy * dt);
+    const targetX = Math.max(0, Math.min(BW_COLS * BW_TILE - BW_W, player.x + player.w / 2 - BW_W / 2));
+    const targetY = Math.max(0, Math.min(BW_ROWS * BW_TILE - BW_H, player.y + player.h / 2 - BW_H / 2));
+    camX += (targetX - camX) * Math.min(1, dt * 7);
+    camY += (targetY - camY) * Math.min(1, dt * 7);
+  }
+  function tapBlock(e) {
+    e.preventDefault();
+    if (state.breakActive || isLocked()) return;
+    const rect = canvas.getBoundingClientRect();
+    const wx = (e.clientX - rect.left) * BW_W / rect.width + camX;
+    const wy = (e.clientY - rect.top) * BW_H / rect.height + camY;
+    const tx = Math.floor(wx / BW_TILE), ty = Math.floor(wy / BW_TILE);
+    if (tx < 0 || tx >= BW_COLS || ty < 0 || ty >= BW_ROWS) return;
+    targetCell = { x: tx, y: ty };
+    const centerX = (player.x + player.w / 2) / BW_TILE;
+    const centerY = (player.y + player.h / 2) / BW_TILE;
+    if (Math.hypot(tx + 0.5 - centerX, ty + 0.5 - centerY) > 5) {
+      msg.textContent = 'That block is far away. Walk a little closer!';
+      sndNo();
+      return;
+    }
+    const idx = ty * BW_COLS + tx;
+    if (mode === 'mine') {
+      const id = grid[idx];
+      if (!id) { msg.textContent = 'Choose a block to mine.'; return; }
+      grid[idx] = 0;
+      inventory[id] = (inventory[id] || 0) + 1;
+      msg.textContent = '+1 ' + BW_BLOCKS[id].emoji + ' ' + BW_BLOCKS[id].name + '!';
+      beep(320, 0.08, 'square', 0.06);
+    } else {
+      const id = selected;
+      if (grid[idx]) { msg.textContent = 'Choose an empty space to build.'; sndNo(); return; }
+      if (!inventory[id]) { msg.textContent = 'Mine some ' + BW_BLOCKS[id].name.toLowerCase() + ' first!'; sndNo(); return; }
+      const touchesPlayer = tx * BW_TILE < player.x + player.w - 2 && (tx + 1) * BW_TILE > player.x + 2 &&
+        ty * BW_TILE < player.y + player.h - 2 && (ty + 1) * BW_TILE > player.y + 2;
+      if (touchesPlayer) { msg.textContent = 'Step out of that space first!'; sndNo(); return; }
+      if (!bwSolid(grid, tx - 1, ty) && !bwSolid(grid, tx + 1, ty) &&
+        !bwSolid(grid, tx, ty - 1) && !bwSolid(grid, tx, ty + 1)) {
+        msg.textContent = 'Build next to another block.';
+        sndNo();
+        return;
+      }
+      grid[idx] = id;
+      inventory[id]--;
+      msg.textContent = BW_BLOCKS[id].emoji + ' ' + BW_BLOCKS[id].name + ' placed!';
+      beep(460, 0.07, 'triangle', 0.07);
+    }
+    saveWorld();
+    renderControls();
+  }
+  canvas.addEventListener('pointerdown', tapBlock);
+
+  function drawBackground(now) {
+    const sky = ctx.createLinearGradient(0, 0, 0, BW_H);
+    sky.addColorStop(0, '#60A5FA');
+    sky.addColorStop(1, '#DBEAFE');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, BW_W, BW_H);
+    ctx.fillStyle = '#FDE68A';
+    ctx.fillRect(800 - camX * 0.05, 42, 64, 64);
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    for (let i = 0; i < 5; i++) {
+      const x = ((i * 250 + now * 0.006 - camX * 0.18) % 1250 + 1250) % 1250 - 100;
+      const y = 65 + (i % 3) * 48;
+      ctx.fillRect(x, y, 100, 22);
+      ctx.fillRect(x + 20, y - 18, 54, 20);
+    }
+    ctx.fillStyle = '#86C5A0';
+    for (let i = 0; i < 8; i++) {
+      const x = i * 220 - (camX * 0.25 % 220) - 100;
+      ctx.beginPath();
+      ctx.moveTo(x, 390);
+      ctx.lineTo(x + 130, 220 + (i % 2) * 45);
+      ctx.lineTo(x + 270, 390);
+      ctx.fill();
+    }
+  }
+  function drawPlayer() {
+    const x = Math.round(player.x - camX), y = Math.round(player.y - camY);
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(x + 2, y + 32, 9, 12);
+    ctx.fillRect(x + 16, y + 32, 9, 12);
+    ctx.fillStyle = '#6366F1';
+    ctx.fillRect(x, y + 17, 26, 19);
+    ctx.fillStyle = '#FDBA74';
+    ctx.fillRect(x + 2, y, 23, 18);
+    ctx.fillStyle = '#78350F';
+    ctx.fillRect(x + 2, y, 23, 5);
+    ctx.fillStyle = '#1E293B';
+    ctx.fillRect(x + 16, y + 8, 4, 4);
+    ctx.fillRect(x + 23, y + 8, 3, 4);
+  }
+  function draw(now) {
+    drawBackground(now);
+    const startX = Math.max(0, Math.floor(camX / BW_TILE));
+    const endX = Math.min(BW_COLS - 1, Math.ceil((camX + BW_W) / BW_TILE));
+    const startY = Math.max(0, Math.floor(camY / BW_TILE));
+    const endY = Math.min(BW_ROWS - 1, Math.ceil((camY + BW_H) / BW_TILE));
+    for (let ty = startY; ty <= endY; ty++) {
+      for (let tx = startX; tx <= endX; tx++) {
+        const id = grid[ty * BW_COLS + tx];
+        if (id) bwDrawBlock(ctx, id, tx * BW_TILE - camX, ty * BW_TILE - camY, BW_TILE, tx, ty);
+      }
+    }
+    if (targetCell) {
+      ctx.strokeStyle = '#FDE047';
+      ctx.lineWidth = 4;
+      ctx.strokeRect(targetCell.x * BW_TILE - camX + 2, targetCell.y * BW_TILE - camY + 2, BW_TILE - 4, BW_TILE - 4);
+    }
+    drawPlayer();
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.fillRect(14, 12, 228, 42);
+    ctx.fillStyle = '#1E293B';
+    ctx.font = '800 20px Nunito, sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText(mode === 'mine' ? '⛏️ Tap a block to mine' : '🧱 Tap a space to build', 26, 34);
+  }
+  function tick(t) {
+    if (!state.breakActive && !isLocked()) {
+      const dt = Math.min(0.033, lastT ? (t - lastT) / 1000 : 0.016);
+      update(dt);
+    }
+    lastT = t;
+    draw(t);
+    gameRaf = requestAnimationFrame(tick);
+  }
+
+  renderControls();
+  saveWorld();
+  draw(0);
+  gameRaf = requestAnimationFrame(tick);
+  gameTimer = setInterval(() => {
+    if (!state.breakActive && !isLocked()) saveWorld();
+  }, 5000);
 }
 
 /* ============================================================
